@@ -84,7 +84,7 @@ const Application = sequelize.define("applications", {
   userId: {
     type: DataTypes.STRING,
     references: {
-      model: "User",
+      model: User,
       key: "id",
     },
     allowNull: false
