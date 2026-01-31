@@ -54,19 +54,19 @@ class ApplicationController {
         return res.json(application);
       }
 
-      const newApplication = await Application.create({
-        dealId,
-        clientBio,
-        clientPhone,
-        city,
-        type,
-        carQuantity,
-        carBrand,
-        commnet,
-        userId,
-      });
+    //   const newApplication = await Application.create({
+    //     dealId,
+    //     clientBio,
+    //     clientPhone,
+    //     city,
+    //     type,
+    //     carQuantity,
+    //     carBrand,
+    //     commnet,
+    //     userId,
+    //   });
 
-      return res.json(newApplication);
+      return res.json('ff');
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }

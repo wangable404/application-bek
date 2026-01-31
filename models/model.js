@@ -66,10 +66,16 @@ const Application = sequelize.define("applications", {
   clientPhone: {
     type: DataTypes.STRING,
   },
+  clientType: {
+    type: DataTypes.STRING,
+  },
   city: {
     type: DataTypes.STRING,
   },
   type: {
+    type: DataTypes.STRING,
+  },
+  monitoringType: {
     type: DataTypes.STRING,
   },
   carQuantity: {
