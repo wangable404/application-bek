@@ -59,20 +59,21 @@ class ApplicationController {
         return res.json(application);
       }
 
-    //   const newApplication = await Application.create({
-    //     dealId,
-    //     clientBio,
-    //     clientPhone,
-    //     city,
-    //     type,
-    //     carQuantity,
-    //     carBrand,
-    //     commnet,
-    //     userId,
-    //   });
+      //   const newApplication = await Application.create({
+      //     dealId,
+      //     clientBio,
+      //     clientPhone,
+      //     city,
+      //     type,
+      //     carQuantity,
+      //     carBrand,
+      //     commnet,
+      //     userId,
+      //   });
 
-      return res.json('ff');
+      return res.json("ff");
     } catch (err) {
+      console.log(err);
       return next(ApiError.badRequest(err.message));
     }
   }
