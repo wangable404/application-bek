@@ -31,7 +31,7 @@ class ApplicationController {
         !commnet ||
         !userId
       ) {
-        return next(ApiError.badRequest("Заполните все поля"));
+        next(ApiError.badRequest("Заполните все поля"));
       }
 
       const application = await Application.findOne({
