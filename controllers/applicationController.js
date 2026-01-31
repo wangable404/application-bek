@@ -1,5 +1,5 @@
 const ApiError = require("../error/ApiError");
-const { Application } = require("../models/model");
+const { Application, User } = require("../models/model");
 
 class ApplicationController {
   async create(req, res, next) {
@@ -90,6 +90,7 @@ class ApplicationController {
       const { userId, dealId } = req.params;
       const application = await Application.findOne({
         where: { userId, dealId },
+        include: [{ model: User }],
       });
       return res.json(application);
     } catch (err) {
