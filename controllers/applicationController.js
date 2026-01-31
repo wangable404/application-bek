@@ -18,22 +18,6 @@ class ApplicationController {
         userId,
       } = req.body;
 
-      if (
-        !dealId ||
-        !clientBio ||
-        !clientPhone ||
-        !city ||
-        !type ||
-        !monitoringType ||
-        !clientType ||
-        !carQuantity ||
-        !carBrand ||
-        !comment ||
-        !userId
-      ) {
-        return next(ApiError.badRequest("Заполните все поля"));
-      }
-
       const application = await Application.findOne({
         where: {
           userId,
