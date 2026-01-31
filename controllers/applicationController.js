@@ -97,6 +97,17 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
+  async reject(req, res, next) {
+    try {
+      const { userId, dealId } = req.params;
+      const application = await Application.findOne({ where: { userId, dealId } });
+      application.status = "rejected";
+      await application.save();
+      return res.json(application);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
 }
 
 module.exports = new ApplicationController();
