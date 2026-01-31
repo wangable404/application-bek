@@ -92,3 +92,5 @@ class ApplicationController {
     }
   }
 }
+
+module.exports = new ApplicationController();
