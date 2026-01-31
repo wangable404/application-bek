@@ -6,6 +6,7 @@ class ApplicationController {
     try {
       const {
         dealId,
+        date,
         clientBio,
         clientPhone,
         city,
@@ -32,6 +33,7 @@ class ApplicationController {
         if (application.status === "rejected") {
           application.status = "pending";
 
+          application.date = date;
           application.clientBio = clientBio;
           application.clientPhone = clientPhone;
           application.city = city;
@@ -53,6 +55,7 @@ class ApplicationController {
 
       // const newApplication = await Application.create({
       //   dealId,
+      //   date,
       //   clientBio,
       //   clientPhone,
       //   city,
@@ -74,7 +77,6 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
-
   async getAll(req, res, next) {
     try {
       const applications = await Application.findAll();
