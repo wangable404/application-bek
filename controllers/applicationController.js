@@ -53,23 +53,23 @@ class ApplicationController {
         return res.json(application);
       }
 
-      // const newApplication = await Application.create({
-      //   dealId,
-      //   date,
-      //   clientBio,
-      //   clientPhone,
-      //   city,
-      //   type,
-      //   carQuantity,
-      //   carBrand,
-      //   comment,
-      //   allCarQuantity,
-      //   forFreight,
-      //   forCars,
-      //   freightBrand,
-      //   relay,
-      //   userId,
-      // });
+      const newApplication = await Application.create({
+        dealId,
+        date,
+        clientBio,
+        clientPhone,
+        city,
+        type,
+        carQuantity,
+        carBrand,
+        comment,
+        allCarQuantity,
+        forFreight,
+        forCars,
+        freightBrand,
+        relay,
+        userId,
+      });
 
       return res.json("ff");
     } catch (err) {
