@@ -1,3 +1,4 @@
+const ApiError = require("../error/ApiError");
 const { Application } = require("../models/model");
 
 class ApplicationController {
@@ -7,8 +8,10 @@ class ApplicationController {
         dealId,
         clientBio,
         clientPhone,
+        clientType,
         city,
         type,
+        monitoringType,
         carQuantity,
         carBrand,
         commnet,
@@ -21,6 +24,8 @@ class ApplicationController {
         !clientPhone ||
         !city ||
         !type ||
+        !monitoringType ||
+        !clientType ||
         !carQuantity ||
         !carBrand ||
         !commnet ||
