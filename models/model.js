@@ -70,16 +70,10 @@ const Application = sequelize.define("applications", {
   clientPhone: {
     type: DataTypes.STRING,
   },
-  clientType: {
-    type: DataTypes.STRING,
-  },
   city: {
     type: DataTypes.STRING,
   },
   type: {
-    type: DataTypes.STRING,
-  },
-  monitoringType: {
     type: DataTypes.STRING,
   },
   carQuantity: {
@@ -91,18 +85,33 @@ const Application = sequelize.define("applications", {
   comment: {
     type: DataTypes.STRING,
   },
+  allCarQuantity: {
+    type: DataTypes.STRING,
+  },
+  forFreight: {
+    type: DataTypes.STRING,
+  },
+  forCars: {
+    type: DataTypes.STRING,
+  },
+  freightBrand: {
+    type: DataTypes.STRING,
+  },
+  relay: {
+    type: DataTypes.STRING,
+  },
   userId: {
     type: DataTypes.STRING,
     references: {
       model: User,
       key: "id",
     },
-    allowNull: false
+    allowNull: false,
   },
 });
 
-User.hasMany(Application, { foreignKey: 'userId' })
-Application.belongsTo(User, { foreignKey: 'userId' })
+User.hasMany(Application, { foreignKey: "userId" });
+Application.belongsTo(User, { foreignKey: "userId" });
 
 module.exports = {
   User,

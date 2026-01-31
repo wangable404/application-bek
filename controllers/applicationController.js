@@ -8,13 +8,16 @@ class ApplicationController {
         dealId,
         clientBio,
         clientPhone,
-        clientType,
         city,
         type,
-        monitoringType,
         carQuantity,
         carBrand,
         comment,
+        allCarQuantity,
+        forFreight,
+        forCars,
+        freightBrand,
+        relay,
         userId,
       } = req.body;
 
@@ -36,6 +39,11 @@ class ApplicationController {
           application.carQuantity = carQuantity;
           application.carBrand = carBrand;
           application.comment = comment;
+          application.allCarQuantity = allCarQuantity;
+          application.forFreight = forFreight;
+          application.forCars = forCars;
+          application.freightBrand = freightBrand;
+          application.relay = relay;
 
           await application.save();
         }
@@ -43,17 +51,22 @@ class ApplicationController {
         return res.json(application);
       }
 
-      //   const newApplication = await Application.create({
-      //     dealId,
-      //     clientBio,
-      //     clientPhone,
-      //     city,
-      //     type,
-      //     carQuantity,
-      //     carBrand,
-      //     comment,
-      //     userId,
-      //   });
+      // const newApplication = await Application.create({
+      //   dealId,
+      //   clientBio,
+      //   clientPhone,
+      //   city,
+      //   type,
+      //   carQuantity,
+      //   carBrand,
+      //   comment,
+      //   allCarQuantity,
+      //   forFreight,
+      //   forCars,
+      //   freightBrand,
+      //   relay,
+      //   userId,
+      // });
 
       return res.json("ff");
     } catch (err) {
