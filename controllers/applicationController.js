@@ -90,7 +90,7 @@ class ApplicationController {
       const { userId, dealId } = req.params;
       const application = await Application.findOne({
         where: { userId, dealId },
-        include: [{ model: User }],
+        include: [{ model: User, attributes: ['id', 'firstName', 'lastName', 'email', 'role'] }],
       });
       return res.json(application);
     } catch (err) {
