@@ -71,7 +71,7 @@ class ApplicationController {
         userId,
       });
 
-      return res.json("ff");
+      return res.json(newApplication);
     } catch (err) {
       console.log(err);
       return next(ApiError.badRequest(err.message));
