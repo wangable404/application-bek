@@ -4,6 +4,7 @@ const sequelize = require('./db')
 const cors = require('cors')
 const model = require('./models/model')
 const fileUpload = require('express-fileupload');
+const errorHeandler = require('./middleware/ErrorHeadlingMiddleware')
 const router = require('./routes/index')
 
 const PORT = process.env.PORT || 8000
@@ -11,6 +12,8 @@ const PORT = process.env.PORT || 8000
 const app = express()
 app.use(cors())
 app.use(express.json())
+
+app.use(errorHeandler);
 
 const start = async () => {
     try {
