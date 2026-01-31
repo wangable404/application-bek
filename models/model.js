@@ -60,6 +60,10 @@ const Application = sequelize.define("applications", {
     ),
     defaultValue: "pending",
   },
+  date: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
   clientBio: {
     type: DataTypes.STRING,
   },
