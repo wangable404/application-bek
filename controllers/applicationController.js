@@ -14,7 +14,7 @@ class ApplicationController {
         monitoringType,
         carQuantity,
         carBrand,
-        commnet,
+        comment,
         userId,
       } = req.body;
 
@@ -28,7 +28,7 @@ class ApplicationController {
         !clientType ||
         !carQuantity ||
         !carBrand ||
-        !commnet ||
+        !comment ||
         !userId
       ) {
         return next(ApiError.badRequest("Заполните все поля"));
@@ -51,7 +51,7 @@ class ApplicationController {
           application.type = type;
           application.carQuantity = carQuantity;
           application.carBrand = carBrand;
-          application.commnet = commnet;
+          application.comment = comment;
 
           await application.save();
         }
@@ -67,7 +67,7 @@ class ApplicationController {
       //     type,
       //     carQuantity,
       //     carBrand,
-      //     commnet,
+      //     comment,
       //     userId,
       //   });
 
