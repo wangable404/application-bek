@@ -15,6 +15,10 @@ class UserController {
     try {
       const { firstName, lastName, email, password } = req.body;
 
+      if(!firstName || !lastName || !email || !password){
+        return next(ApiError.badRequest('Заполните все необходимые поля'))
+      }
+
       const candidate = await User.findOne({ where: { email } });
       if (candidate) {
         return next(ApiError.badRequest("Пользователь уже существует"));
