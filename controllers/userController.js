@@ -44,6 +44,7 @@ class UserController {
         message: "Код подтверждения отправлен на почту",
       });
     } catch (err) {
+      console.log('zzz', err)
       next(ApiError.badRequest(err.message));
     }
   }
