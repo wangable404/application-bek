@@ -79,7 +79,10 @@ class ApplicationController {
   }
   async getAll(req, res, next) {
     try {
-      const applications = await Application.findAll();
+      const userId = req.user.id;
+      const applications = await Application.findAll({
+        where: { userId },
+      });
       return res.json(applications);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
@@ -90,7 +93,12 @@ class ApplicationController {
       const { userId, dealId } = req.params;
       const application = await Application.findOne({
         where: { userId, dealId },
-        include: [{ model: User, attributes: ['id', 'firstName', 'lastName', 'email', 'role'] }],
+        include: [
+          {
+            model: User,
+            attributes: ["id", "firstName", "lastName", "email", "role"],
+          },
+        ],
       });
       return res.json(application);
     } catch (err) {
@@ -100,7 +108,34 @@ class ApplicationController {
   async reject(req, res, next) {
     try {
       const { userId, dealId } = req.params;
-      const application = await Application.findOne({ where: { userId, dealId } });
+      const application = await Application.findOne({
+        where: { userId, dealId },
+      });
+      application.status = "rejected";
+      await application.save();
+      return res.json(application);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async acceptApp(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+      const application = await Application.findOne({ where: { userId, id } });
+      application.status = "accepted";
+      await application.save();
+      return res.json(application);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+  async rejectApp(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+      const application = await Application.findOne({ where: { userId, id } });
       application.status = "rejected";
       await application.save();
       return res.json(application);

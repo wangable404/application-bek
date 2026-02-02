@@ -3,7 +3,7 @@ const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { sendVerificationMail } = require("../services/mailService");
-const uuid = require('uuid')
+const uuid = require("uuid");
 
 const generateJwt = (id, firstName, lastName, email) => {
   const payload = { id, firstName, lastName, email };
@@ -15,19 +15,36 @@ class UserController {
     try {
       const { firstName, lastName, email, password } = req.body;
 
-      if(!firstName || !lastName || !email || !password){
-        return next(ApiError.badRequest('Заполните все необходимые поля'))
+      if (!firstName || !lastName || !email || !password) {
+        return next(ApiError.badRequest("Заполните все необходимые поля"));
       }
 
-      const candidate = await User.findOne({ where: { email } });
-      if (candidate) {
-        return next(ApiError.badRequest("Пользователь уже существует"));
-      }
+      const user = await User.findOne({ where: { email } });
+
+      const hashPassword = await bcrypt.hash(password, 10);
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expires = new Date(Date.now() + 10 * 60 * 1000);
 
-      const hashPassword = await bcrypt.hash(password, 10);
+      if (user) {
+        if (user.isVerified) {
+          return next(ApiError.badRequest("Пользователь уже существует"));
+        }
+
+        await user.update({
+          lastName,
+          firstName,
+          password: hashPassword,
+          emailCode: code,
+          emailCodeExpires: expires,
+        });
+
+        await sendVerificationMail(email, code);
+
+        return res.json({
+          message: "Код подтверждения повторно отправлен на почту",
+        });
+      }
 
       await User.create({
         firstName,
@@ -36,6 +53,7 @@ class UserController {
         password: hashPassword,
         emailCode: code,
         emailCodeExpires: expires,
+        isVerified: false,
       });
 
       await sendVerificationMail(email, code);
@@ -44,10 +62,11 @@ class UserController {
         message: "Код подтверждения отправлен на почту",
       });
     } catch (err) {
-      console.log('zzz', err)
-      next(ApiError.badRequest(err.message));
+      console.error(err);
+      return next(ApiError.internal("Ошибка регистрации"));
     }
   }
+
   async resendCode(req, res, next) {
     try {
       const { email } = req.body;
@@ -134,7 +153,7 @@ class UserController {
   async getAll(req, res, next) {
     try {
       // const id = req.user.id;
-      
+
       // const user = await User.findByPk(id);
       // if (user.role !== "ADMIN") {
       //   return next(ApiError.forbidden("Нет доступа"));
