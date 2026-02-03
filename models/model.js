@@ -101,7 +101,7 @@ const Application = sequelize.define("applications", {
     type: DataTypes.STRING,
   },
   userId: {
-    type: DataTypes.STRING,
+    type: DataTypes.UUID,
     references: {
       model: User,
       key: "id",
@@ -110,10 +110,141 @@ const Application = sequelize.define("applications", {
   },
 });
 
+const ApplicationCompletion = sequelize.define("application_completions", {
+  id: {
+    type: DataTypes.UUID,
+    primaryKey: true,
+    defaultValue: DataTypes.UUIDV4,
+  },
+
+  equipment: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+  },
+
+  completedWorks: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+  },
+
+  actSigned: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+
+  applicationId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: Application,
+      key: "id",
+    },
+    allowNull: false,
+  },
+});
+
+const ApplicationPhoto = sequelize.define("application_photos", {
+  id: {
+    type: DataTypes.UUID,
+    primaryKey: true,
+    defaultValue: DataTypes.UUIDV4,
+  },
+
+  path: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+
+  completionId: {
+    type: DataTypes.UUID,
+    references: {
+      model: ApplicationCompletion,
+      key: "id",
+    },
+    allowNull: false,
+  },
+});
+
+const Chat = sequelize.define("chats", {
+  id: {
+    type: DataTypes.UUID,
+    primaryKey: true,
+    defaultValue: DataTypes.UUIDV4,
+  },
+  applicationId: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: Application,
+      key: "id",
+    },
+    allowNull: false,
+    unique: true,
+  },
+});
+
+const Message = sequelize.define(
+  "messages",
+  {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    text: {
+      type: DataTypes.STRING,
+    },
+    chatId: {
+      type: DataTypes.UUID,
+      references: {
+        model: Chat,
+        key: "id",
+      },
+      allowNull: false,
+    },
+    senderId: {
+      type: DataTypes.UUID,
+      references: {
+        model: User,
+        key: "id",
+      },
+      allowNull: false,
+    },
+  },
+  { timestamps: true },
+);
+
 User.hasMany(Application, { foreignKey: "userId" });
 Application.belongsTo(User, { foreignKey: "userId" });
+
+Application.hasOne(ApplicationCompletion, {
+  foreignKey: "applicationId",
+});
+
+ApplicationCompletion.belongsTo(Application, {
+  foreignKey: "applicationId",
+});
+
+ApplicationCompletion.hasMany(ApplicationPhoto, {
+  foreignKey: "completionId",
+});
+
+ApplicationPhoto.belongsTo(ApplicationCompletion, {
+  foreignKey: "completionId",
+});
+
+Application.hasOne(Chat, { foreignKey: "applicationId" });
+Chat.belongsTo(Application, { foreignKey: "applicationId" });
+
+Chat.hasMany(Message, { foreignKey: "chatId" });
+Message.belongsTo(Chat, { foreignKey: "chatId" });
+
+User.hasMany(Message, { foreignKey: "senderId" });
+Message.belongsTo(User, { foreignKey: "senderId" });
 
 module.exports = {
   User,
   Application,
+  ApplicationCompletion,
+  ApplicationPhoto,
+  Chat,
+  Message,
 };

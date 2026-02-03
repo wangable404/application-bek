@@ -1,5 +1,12 @@
+const path = require("path");
 const ApiError = require("../error/ApiError");
-const { Application, User } = require("../models/model");
+const {
+  Application,
+  User,
+  ApplicationCompletion,
+  ApplicationPhoto,
+  Chat,
+} = require("../models/model");
 
 class ApplicationController {
   async create(req, res, next) {
@@ -71,6 +78,8 @@ class ApplicationController {
         userId,
       });
 
+      await Chat.create({ applicationId: newApplication.id });
+
       return res.json(newApplication);
     } catch (err) {
       console.log(err);
@@ -118,29 +127,73 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
-
-  async acceptApp(req, res, next) {
+  async changeStatus(req, res, next) {
     try {
-      const { id } = req.params;
+      const { id, status } = req.params;
       const userId = req.user.id;
       const application = await Application.findOne({ where: { userId, id } });
-      application.status = "accepted";
+      application.status = status;
       await application.save();
       return res.json(application);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
   }
-  async rejectApp(req, res, next) {
+  async completeApplication(req, res, next) {
     try {
       const { id } = req.params;
-      const userId = req.user.id;
-      const application = await Application.findOne({ where: { userId, id } });
-      application.status = "rejected";
-      await application.save();
-      return res.json(application);
-    } catch (err) {
-      return next(ApiError.badRequest(err.message));
+      const { equipment, completedWorks, actSigned } = req.body;
+
+      const application = await Application.findByPk(id);
+      if (!application) {
+        return next(ApiError.badRequest("Application not found"));
+      }
+
+      const completion = await ApplicationCompletion.create({
+        applicationId: id,
+        equipment: JSON.parse(equipment),
+        completedWorks: JSON.parse(completedWorks),
+        actSigned: JSON.parse(actSigned),
+      });
+
+      if (req.files && req.files.photos) {
+        const files = Array.isArray(req.files.photos)
+          ? req.files.photos
+          : [req.files.photos];
+
+        const photos = [];
+
+        for (const file of files) {
+          const uploadPath = path.resolve(
+            __dirname,
+            "..",
+            "static",
+            "uploads",
+            file.name,
+          );
+
+          await file.mv(uploadPath);
+
+          photos.push({
+            completionId: completion.id,
+            path: "/uploads/" + file.name,
+          });
+        }
+
+        await ApplicationPhoto.bulkCreate(photos);
+
+        console.log("Загруженные фото:", photos);
+      }
+
+      await application.update({ status: "review" });
+
+      return res.json({
+        success: true,
+        completion,
+      });
+    } catch (e) {
+      console.error(e);
+      return next(ApiError.badRequest(e.message));
     }
   }
 }

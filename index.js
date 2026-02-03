@@ -1,19 +1,22 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http");
 const sequelize = require("./db");
 const cors = require("cors");
 const model = require("./models/model");
 const fileUpload = require("express-fileupload");
 const errorHeandler = require("./middleware/ErrorHeadlingMiddleware");
 const router = require("./routes/index");
+const path = require("path");
+const initSocket = require("./socket");
 
 const PORT = process.env.PORT || 8000;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.json());
-app.use(fileUpload());
+app.use(fileUpload({}));
+app.use(express.static(path.resolve(__dirname, "static")));
 app.use("/api/v1/", router);
 
 app.use(errorHeandler);
@@ -27,7 +30,11 @@ const start = async () => {
     await sequelize.authenticate();
     await sequelize.sync();
 
-    app.listen(PORT, "0.0.0.0", () => {
+    const server = http.createServer(app);
+    const io = initSocket(server);
+    app.set("io", io);
+    
+    server.listen(PORT, "0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
     });
   } catch (err) {

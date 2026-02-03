@@ -75,6 +75,10 @@ class UserController {
         return next(ApiError.badRequest("Пользователь не найден"));
       }
 
+      if (user.isVerified) {
+        return next(ApiError.badRequest("Почта уже подтверждена"));
+      }
+
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const expires = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -146,6 +150,22 @@ class UserController {
         user.email,
       );
       return res.json({ token });
+    } catch (err) {
+      next(ApiError.badRequest(err.message));
+    }
+  }
+  async check(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const user = await User.findByPk(userId, {
+        attributes: ["id", "firstName", "lastName", "email"],
+      });
+
+      if (!user) {
+        return next(ApiError.unauthorized("Пользователь не найден"));
+      }
+
+      return res.json({ user });
     } catch (err) {
       next(ApiError.badRequest(err.message));
     }
