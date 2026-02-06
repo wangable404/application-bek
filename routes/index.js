@@ -6,6 +6,6 @@ const chatRouter = require('./chatRouter')
 
 router.use('/user', userRouter)
 router.use('/application', applicationRouter)
-router.use('/chat', chatRouter)
+router.use('/chats', chatRouter)
 
 module.exports = router

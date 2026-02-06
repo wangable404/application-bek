@@ -3,18 +3,17 @@ const router = new Router();
 const chatController = require("../controllers/chatController");
 const authMiddleware = require("../middleware/middleware");
 
-// Получить чат заявки
 router.get(
   "/:applicationId/chat",
   authMiddleware,
-  chatController.getByApplication
+  chatController.getByApplication,
 );
-
-// Отправить сообщение
 router.post(
   "/:applicationId/chat/message",
   authMiddleware,
-  chatController.sendMessage
+  chatController.sendMessage,
 );
+router.get("/", authMiddleware, chatController.getAllChats);
+router.patch('/:chatId/read', authMiddleware, chatController.read)
 
 module.exports = router;

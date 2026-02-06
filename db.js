@@ -11,7 +11,7 @@ module.exports = new Sequelize(
         dialectOptions: {
             ssl: {
                 require: true,
-                rejectUnauthorized: false, // Это может быть необходимо в вашем окружении
+                rejectUnauthorized: false,
             },
         },
     }

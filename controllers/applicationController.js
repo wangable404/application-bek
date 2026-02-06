@@ -6,7 +6,9 @@ const {
   ApplicationCompletion,
   ApplicationPhoto,
   Chat,
+  Message,
 } = require("../models/model");
+const { model } = require("../db");
 
 class ApplicationController {
   async create(req, res, next) {
@@ -26,6 +28,7 @@ class ApplicationController {
         forCars,
         freightBrand,
         relay,
+        workType,
         userId,
       } = req.body;
 
@@ -53,6 +56,7 @@ class ApplicationController {
           application.forCars = forCars;
           application.freightBrand = freightBrand;
           application.relay = relay;
+          application.workType = workType;
 
           await application.save();
         }
@@ -75,6 +79,7 @@ class ApplicationController {
         forCars,
         freightBrand,
         relay,
+        workType,
         userId,
       });
 
@@ -88,9 +93,29 @@ class ApplicationController {
   }
   async getAll(req, res, next) {
     try {
-      const userId = req.user.id;
+      const user = req.user;
+
+      if (user.role == "ADMIN") {
+        const applications = await Application.findAll({
+          include: [
+            { model: User },
+            {
+              model: ApplicationCompletion,
+              include: { model: ApplicationPhoto },
+            },
+          ],
+        });
+        return res.json(applications);
+      }
+
       const applications = await Application.findAll({
-        where: { userId },
+        where: { userId: user.id },
+        include: [
+          {
+            model: Chat,
+            include: [{ model: Message, order: [["createdAt", "DESC"]] }],
+          },
+        ],
       });
       return res.json(applications);
     } catch (err) {
@@ -113,6 +138,29 @@ class ApplicationController {
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
+  }
+
+  async getOneAdmin(req, res, next) {
+    const { id } = req.params;
+    const user = req.user;
+
+    if (user.role !== "ADMIN") {
+      return next(ApiError.forbidden("Нет доступа"));
+    }
+
+    const application = await Application.findOne({
+      where: { id: id },
+      include: [
+        { model: User },
+        { model: ApplicationCompletion, include: { model: ApplicationPhoto } },
+      ],
+    });
+
+    if (!application) {
+      return next(ApiError.badRequest("Application not found"));
+    }
+
+    return res.json(application);
   }
   async reject(req, res, next) {
     try {

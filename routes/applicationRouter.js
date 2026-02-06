@@ -5,6 +5,7 @@ const router = new Router();
 
 router.post("/create", applicationController.create);
 router.get("/", authMiddleware, applicationController.getAll);
+router.get('/:id', authMiddleware, applicationController.getOneAdmin)
 router.get("/:userId/:dealId", applicationController.getOne);
 router.post("/:userId/:dealId/reject", applicationController.reject);
 router.post(

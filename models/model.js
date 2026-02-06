@@ -100,6 +100,21 @@ const Application = sequelize.define("applications", {
   relay: {
     type: DataTypes.STRING,
   },
+  agreedDate: {
+    type: DataTypes.DATEONLY,
+  },
+  startWorkComment: {
+    type: DataTypes.TEXT,
+  },
+  workType: {
+    type: DataTypes.ENUM(
+      "service", // Сервисные работы
+      "transition", // Переход
+      "installation", // Установка
+    ),
+    defaultValue: "installation",
+    comment: "Тип работ",
+  },
   userId: {
     type: DataTypes.UUID,
     references: {
@@ -122,14 +137,14 @@ const ApplicationCompletion = sequelize.define("application_completions", {
     allowNull: false,
   },
 
-  completedWorks: {
-    type: DataTypes.JSONB,
-    allowNull: false,
-  },
-
   actSigned: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
+  },
+
+  completionComment: {
+    type: DataTypes.TEXT,
+    comment: "Комментарий при сдаче работы",
   },
 
   applicationId: {
@@ -139,6 +154,7 @@ const ApplicationCompletion = sequelize.define("application_completions", {
       key: "id",
     },
     allowNull: false,
+    unique: true
   },
 });
 
@@ -207,6 +223,10 @@ const Message = sequelize.define(
         key: "id",
       },
       allowNull: false,
+    },
+    read: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   },
   { timestamps: true },

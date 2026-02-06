@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const ApiError = require("../error/ApiError");
 const { Chat, Message, Application, User } = require("../models/model");
 
@@ -70,7 +71,7 @@ class ChatController {
       const message = await Message.create({
         chatId: chat.id,
         senderId: user.id,
-        text: text.trim(),
+        text: text.trim()
       });
 
       const fullMessage = await Message.findByPk(message.id, {
@@ -82,12 +83,76 @@ class ChatController {
         ],
       });
 
+      await chat.update({ updatedAt: new Date() });
+
       const io = req.app.get("io");
       io.to(`chat_${applicationId}`).emit("new_message", fullMessage);
 
       return res.json(fullMessage);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
+    }
+  }
+  async getAllChats(req, res, next) {
+    try {
+      const user = req.user;
+
+      const chats = await Chat.findAll({
+        include: [
+          {
+            model: Application,
+            attributes: ["id", "userId"],
+            required: true,
+            include: [{
+              model: User,
+              attributes: ["id", "firstName", "lastName", "role"],
+            }],
+          },
+          {
+            model: Message,
+            separate: true,
+            limit: 1,
+            order: [["createdAt", "DESC"]],
+            include: [
+              {
+                model: User,
+                attributes: ["id", "firstName", "lastName", "role"],
+              },
+            ],
+          },
+        ],
+        order: [["updatedAt", "DESC"]],
+      });
+
+      const filteredChats =
+        user.role === "USER"
+          ? chats.filter((chat) => chat.application.userId === user.id)
+          : chats;
+
+      return res.json(filteredChats);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+  async read(req, res, next) {
+    try {
+      const { chatId } = req.params;
+      const userId = req.user.id;
+
+      await Message.update(
+        { read: true },
+        {
+          where: {
+            chatId,
+            senderId: { [Op.ne]: userId },
+            read: false,
+          },
+        },
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
   }
 }

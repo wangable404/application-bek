@@ -5,12 +5,33 @@ const bcrypt = require("bcrypt");
 const { sendVerificationMail } = require("../services/mailService");
 const uuid = require("uuid");
 
-const generateJwt = (id, firstName, lastName, email) => {
-  const payload = { id, firstName, lastName, email };
+const generateJwt = (id, firstName, lastName, email, role) => {
+  const payload = { id, firstName, lastName, email, role };
   return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
 };
 
 class UserController {
+  async create(req, res, next) {
+    try {
+      const user = req.user;
+
+      if (user.role == "ADMIN") {
+        return next(ApiError.badRequest("Нет доступа"));
+      }
+
+      const { firstName, lastName, email, password, role } = req.body;
+      const create = await User.create({
+        firstName,
+        lastName,
+        email,
+        password,
+        role,
+      });
+      return res.json(create);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
   async registration(req, res, next) {
     try {
       const { firstName, lastName, email, password } = req.body;
@@ -122,6 +143,7 @@ class UserController {
         user.firstName,
         user.lastName,
         user.email,
+        user.role,
       );
 
       return res.json({ token });
@@ -131,11 +153,16 @@ class UserController {
   }
   async login(req, res, next) {
     try {
-      const { email, password } = req.body;
+      const { email, password, isAdmin } = req.body;
       const user = await User.findOne({ where: { email } });
       if (!user) {
         return next(ApiError.badRequest("Пользователь не найден"));
       }
+
+      if (isAdmin && user.role !== "ADMIN") {
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+
       if (!user.isVerified) {
         return next(ApiError.forbidden("Подтвердите почту"));
       }
@@ -148,6 +175,7 @@ class UserController {
         user.firstName,
         user.lastName,
         user.email,
+        user.role,
       );
       return res.json({ token });
     } catch (err) {
@@ -158,7 +186,7 @@ class UserController {
     try {
       const userId = req.user.id;
       const user = await User.findByPk(userId, {
-        attributes: ["id", "firstName", "lastName", "email"],
+        attributes: ["id", "firstName", "lastName", "email", "role"],
       });
 
       if (!user) {
@@ -172,16 +200,77 @@ class UserController {
   }
   async getAll(req, res, next) {
     try {
-      // const id = req.user.id;
-
-      // const user = await User.findByPk(id);
-      // if (user.role !== "ADMIN") {
-      //   return next(ApiError.forbidden("Нет доступа"));
-      // }
       const users = await User.findAll({
         attributes: ["id", "firstName", "lastName", "email", "role"],
       });
       return res.json(users);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async getAllAdmin(req, res, next) {
+    try {
+      const id = req.user.id;
+      const user = await User.findByPk(id);
+      if (user.role !== "ADMIN") {
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+      const users = await User.findAll();
+      return res.json(users);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async update(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { firstName, lastName, email, password, role } = req.body;
+      const authUser = req.user;
+
+      if (authUser.role !== "ADMIN") {
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+
+      const user = await User.findByPk(id);
+      if (!user) {
+        return next(ApiError.notFound("Пользователь не найден"));
+      }
+
+      if (firstName !== undefined) user.firstName = firstName;
+      if (lastName !== undefined) user.lastName = lastName;
+      if (email !== undefined) user.email = email;
+      if (role !== undefined) user.role = role;
+
+      if (password !== undefined) {
+        // если используешь хеширование
+        const hashPassword = await bcrypt.hash(password, 5);
+        user.password = hashPassword;
+      }
+
+      await user.save();
+
+      return res.json(user);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async delete(req,res,next){
+    try {
+      const {id} = req.params;
+      const user = await User.findByPk(id);
+      if(!user){
+        return next(ApiError.notFound("Пользователь не найден"));
+      }
+
+      if(user.role !== "ADMIN"){
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+
+      await user.destroy();
+      return res.json({message:"Пользователь удален"});
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
