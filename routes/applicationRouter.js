@@ -7,12 +7,14 @@ router.post("/create", applicationController.create);
 router.get("/", authMiddleware, applicationController.getAll);
 router.get('/:id', authMiddleware, applicationController.getOneAdmin)
 router.get("/:userId/:dealId", applicationController.getOne);
+router.put("/:userId/:dealId/update-worktype", applicationController.updateWorktype);
 router.post("/:userId/:dealId/reject", applicationController.reject);
 router.post(
   "/:id/:status/status",
   authMiddleware,
   applicationController.changeStatus,
 );
+router.post('/:id/start-work', authMiddleware, applicationController.startWork)
 router.post("/:id/complete", applicationController.completeApplication);
 
 module.exports = router;

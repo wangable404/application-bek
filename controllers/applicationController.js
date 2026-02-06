@@ -140,6 +140,21 @@ class ApplicationController {
     }
   }
 
+  async updateWorktype(req,res,next){
+    try {
+      const { userId, dealId } = req.params;
+      const { workType } = req.body;
+      const application = await Application.findOne({
+        where: { userId, dealId },
+      });
+      application.workType = workType;
+      await application.save();
+      return res.json(application);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
   async getOneAdmin(req, res, next) {
     const { id } = req.params;
     const user = req.user;
@@ -186,6 +201,23 @@ class ApplicationController {
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
+  }
+  async startWork(req, res, next) {
+    const { id } = req.params;
+    const { agreedDate, startWorkComment, workType } = req.body;
+    const user = req.user;
+
+    const application = await Application.findOne({ where: { id } });
+
+    if (user.id !== application.userId) {
+      return next(ApiError.forbidden("Нет доступа"));
+    }
+
+    application.agreedDate = agreedDate;
+    application.startWorkComment = startWorkComment;
+    application.workType = workType;
+    await application.save();
+    return res.json(application);
   }
   async completeApplication(req, res, next) {
     try {
