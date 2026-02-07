@@ -195,6 +195,22 @@ const Chat = sequelize.define("chats", {
     allowNull: false,
     unique: true,
   },
+  archived: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  archivedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  archivedBy: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: true,
+  },
 });
 
 const Message = sequelize.define(

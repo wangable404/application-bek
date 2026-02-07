@@ -14,6 +14,9 @@ router.post(
   chatController.sendMessage,
 );
 router.get("/", authMiddleware, chatController.getAllChats);
+router.get("/archived", authMiddleware, chatController.getArchivedChats);
+router.patch('/:chatId/archive', authMiddleware, chatController.archive);
+router.patch('/:chatId/unarchive', authMiddleware, chatController.unarchive);
 router.patch('/:chatId/read', authMiddleware, chatController.read)
 
 module.exports = router;

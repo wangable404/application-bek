@@ -50,63 +50,214 @@ class ChatController {
     }
   }
 
-  async sendMessage(req, res, next) {
+  async getArchivedChats(req, res, next) {
     try {
-      const { applicationId } = req.params;
-      const { text } = req.body;
       const user = req.user;
+      const userId = user.id;
 
-      if (!text || !text.trim()) {
-        return next(ApiError.badRequest("Сообщение пустое"));
-      }
+      const chats = await Chat.findAll({
+        where: {
+          archived: true,
+        },
+        include: [
+          {
+            model: Application,
+            attributes: ["id", "userId"],
+            required: true,
+            include: [
+              {
+                model: User,
+                attributes: ["id", "firstName", "lastName", "role"],
+              },
+            ],
+          },
+          {
+            model: Message,
+            separate: true,
+            limit: 1,
+            order: [["createdAt", "DESC"]],
+            include: [
+              {
+                model: User,
+                attributes: ["id", "firstName", "lastName", "role"],
+              },
+            ],
+          },
+        ],
+        order: [["updatedAt", "DESC"]],
+      });
 
-      const chat = await Chat.findOne({
-        where: { applicationId },
+      // Фильтруем чаты для обычных пользователей
+      const filteredChats =
+        user.role === "USER"
+          ? chats.filter((chat) => chat.application.userId === user.id)
+          : chats;
+
+      const chatsWithUnread = await Promise.all(
+        filteredChats.map(async (chat) => {
+          const chatData = chat.toJSON();
+
+          const unreadCount = await Message.count({
+            where: {
+              chatId: chat.id,
+              read: false,
+              senderId: { [Op.ne]: userId },
+            },
+          });
+
+          chatData.unreadCount = unreadCount;
+          return chatData;
+        }),
+      );
+
+      return res.json(chatsWithUnread);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async archive(req, res, next) {
+    try {
+      const { chatId } = req.params;
+      const userId = req.user.id;
+
+      const chat = await Chat.findByPk(chatId, {
+        include: [
+          {
+            model: Application,
+            attributes: ["id"],
+          },
+        ],
       });
 
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
 
-      const message = await Message.create({
-        chatId: chat.id,
-        senderId: user.id,
-        text: text.trim()
+      // Проверка прав доступа
+      const application = await Application.findByPk(chat.applicationId, {
+        include: [{ model: User }],
       });
 
-      const fullMessage = await Message.findByPk(message.id, {
-        include: [
-          {
-            model: User,
-            attributes: ["id", "firstName", "lastName", "role"],
-          },
-        ],
-      });
+      if (req.user.role === "USER" && application.userId !== req.user.id) {
+        return next(ApiError.forbidden("Нет доступа к этому чату"));
+      }
 
-      await chat.update({ updatedAt: new Date() });
+      await chat.update({
+        archived: true,
+        archivedAt: new Date(),
+        archivedBy: userId,
+      });
 
       const io = req.app.get("io");
-      io.to(`chat_${applicationId}`).emit("new_message", fullMessage);
+      if (io) {
+        io.emit("chat_archived", {
+          chatId: chat.id,
+          applicationId: chat.applicationId,
+          archivedBy: userId,
+          archivedAt: chat.archivedAt,
+        });
 
-      return res.json(fullMessage);
+        io.emit("chat_updated", {
+          chatId: chat.id,
+          applicationId: chat.applicationId,
+          archived: true,
+        });
+      }
+
+      return res.json({
+        success: true,
+        chat: {
+          id: chat.id,
+          archived: chat.archived,
+          archivedAt: chat.archivedAt,
+        },
+      });
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
   }
+
+  async unarchive(req, res, next) {
+    try {
+      const { chatId } = req.params;
+      const userId = req.user.id;
+
+      const chat = await Chat.findByPk(chatId, {
+        include: [
+          {
+            model: Application,
+            attributes: ["id"],
+          },
+        ],
+      });
+
+      if (!chat) {
+        return next(ApiError.badRequest("Чат не найден"));
+      }
+
+      const application = await Application.findByPk(chat.applicationId, {
+        include: [{ model: User }],
+      });
+
+      if (req.user.role === "USER" && application.userId !== req.user.id) {
+        return next(ApiError.forbidden("Нет доступа к этому чату"));
+      }
+
+      await chat.update({
+        archived: false,
+        archivedAt: null,
+        archivedBy: null,
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("chat_unarchived", {
+          chatId: chat.id,
+          applicationId: chat.applicationId,
+          unarchivedBy: userId,
+        });
+
+        // Также отправляем общее обновление чатов
+        io.emit("chat_updated", {
+          chatId: chat.id,
+          applicationId: chat.applicationId,
+          archived: false,
+        });
+      }
+
+      return res.json({
+        success: true,
+        chat: {
+          id: chat.id,
+          archived: chat.archived,
+        },
+      });
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
   async getAllChats(req, res, next) {
     try {
       const user = req.user;
+      const userId = user.id;
 
       const chats = await Chat.findAll({
+        where: {
+          archived: false, // Добавлено условие для неархивных чатов
+        },
         include: [
           {
             model: Application,
             attributes: ["id", "userId"],
             required: true,
-            include: [{
-              model: User,
-              attributes: ["id", "firstName", "lastName", "role"],
-            }],
+            include: [
+              {
+                model: User,
+                attributes: ["id", "firstName", "lastName", "role"],
+              },
+            ],
           },
           {
             model: Message,
@@ -129,11 +280,105 @@ class ChatController {
           ? chats.filter((chat) => chat.application.userId === user.id)
           : chats;
 
-      return res.json(filteredChats);
+      const chatsWithUnread = await Promise.all(
+        filteredChats.map(async (chat) => {
+          const chatData = chat.toJSON();
+
+          const unreadCount = await Message.count({
+            where: {
+              chatId: chat.id,
+              read: false,
+              senderId: { [Op.ne]: userId },
+            },
+          });
+
+          chatData.unreadCount = unreadCount;
+          return chatData;
+        }),
+      );
+
+      return res.json(chatsWithUnread);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
   }
+
+  async sendMessage(req, res, next) {
+    try {
+      const { applicationId } = req.params;
+      const { text } = req.body;
+      const user = req.user;
+
+      if (!text || !text.trim()) {
+        return next(ApiError.badRequest("Сообщение пустое"));
+      }
+
+      const chat = await Chat.findOne({
+        where: { applicationId },
+      });
+
+      if (!chat) {
+        return next(ApiError.badRequest("Чат не найден"));
+      }
+
+      if (chat.archived) {
+        // Автоматически разархивируем чат при новом сообщении
+        await chat.update({
+          archived: false,
+          archivedAt: null,
+          archivedBy: null,
+        });
+
+        // Отправляем событие разархивации
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('chat_unarchived', {
+            chatId: chat.id,
+            applicationId: chat.applicationId,
+            unarchivedBy: user.id,
+          });
+        }
+      }
+
+      const message = await Message.create({
+        chatId: chat.id,
+        senderId: user.id,
+        text: text.trim(),
+      });
+
+      const fullMessage = await Message.findByPk(message.id, {
+        include: [
+          {
+            model: User,
+            attributes: ["id", "firstName", "lastName", "role"],
+          },
+        ],
+      });
+
+      await chat.update({ updatedAt: new Date() });
+
+      // ✅ Отправляем сообщение через Socket.io
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat_${applicationId}`).emit('new_message', {
+          ...fullMessage.toJSON(),
+          user: fullMessage.user
+        });
+        
+        // Также отправляем обновление списка чатов
+        io.emit('chat_updated', { 
+          chatId: chat.id, 
+          applicationId,
+          lastMessage: fullMessage 
+        });
+      }
+
+      return res.json(fullMessage);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
   async read(req, res, next) {
     try {
       const { chatId } = req.params;
@@ -149,6 +394,12 @@ class ChatController {
           },
         },
       );
+
+      // ✅ Отправляем событие об обновлении прочитанных сообщений
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("messages_read", { chatId, userId });
+      }
 
       res.json({ success: true });
     } catch (error) {

@@ -32,10 +32,16 @@ const start = async () => {
 
     const server = http.createServer(app);
     const io = initSocket(server);
+
+    // Сохраняем io в app locals
+    app.locals.io = io;
     app.set("io", io);
-    
+
+    console.log("Socket.io attached to app");
+
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log(`WebSocket доступен по ws://0.0.0.0:${PORT}`);
     });
   } catch (err) {
     console.log("Error connecting to the database:", err);
