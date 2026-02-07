@@ -140,7 +140,7 @@ class ApplicationController {
     }
   }
 
-  async updateWorktype(req,res,next){
+  async updateWorktype(req, res, next) {
     try {
       const { userId, dealId } = req.params;
       const { workType } = req.body;
@@ -193,8 +193,18 @@ class ApplicationController {
   async changeStatus(req, res, next) {
     try {
       const { id, status } = req.params;
-      const userId = req.user.id;
-      const application = await Application.findOne({ where: { userId, id } });
+      const user = req.user;
+
+      if (user.role == "ADMIN") {
+        const application = await Application.findOne({ where: { id } });
+        application.status = status;
+        await application.save();
+        return res.json(application);
+      }
+
+      const application = await Application.findOne({
+        where: { userId: user.id, id },
+      });
       application.status = status;
       await application.save();
       return res.json(application);
@@ -222,20 +232,28 @@ class ApplicationController {
   async completeApplication(req, res, next) {
     try {
       const { id } = req.params;
-      const { equipment, completedWorks, actSigned } = req.body;
+      const { equipment, actSigned, completionComment } = req.body;
 
       const application = await Application.findByPk(id);
       if (!application) {
-        return next(ApiError.badRequest("Application not found"));
+        return next(ApiError.badRequest("Заявка не найдена"));
       }
 
+      if (application.status !== "in_progress") {
+        return next(
+          ApiError.badRequest("Заявка не находится в статусе 'in_progress'"),
+        );
+      }
+
+      // Создаем запись о завершении работ
       const completion = await ApplicationCompletion.create({
         applicationId: id,
         equipment: JSON.parse(equipment),
-        completedWorks: JSON.parse(completedWorks),
         actSigned: JSON.parse(actSigned),
+        completionComment: completionComment || null, // Добавляем комментарий при сдаче
       });
 
+      // Загрузка фото
       if (req.files && req.files.photos) {
         const files = Array.isArray(req.files.photos)
           ? req.files.photos
@@ -244,35 +262,37 @@ class ApplicationController {
         const photos = [];
 
         for (const file of files) {
+          // Генерируем уникальное имя файла
+          const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
           const uploadPath = path.resolve(
             __dirname,
             "..",
             "static",
             "uploads",
-            file.name,
+            uniqueName,
           );
 
           await file.mv(uploadPath);
 
           photos.push({
             completionId: completion.id,
-            path: "/uploads/" + file.name,
+            path: "/uploads/" + uniqueName,
           });
         }
 
         await ApplicationPhoto.bulkCreate(photos);
-
-        console.log("Загруженные фото:", photos);
       }
 
+      // Обновляем статус заявки
       await application.update({ status: "review" });
 
       return res.json({
         success: true,
         completion,
+        message: "Работа успешно сдана на проверку",
       });
     } catch (e) {
-      console.error(e);
+      console.error("Ошибка при сдаче работы:", e);
       return next(ApiError.badRequest(e.message));
     }
   }

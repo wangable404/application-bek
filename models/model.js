@@ -43,6 +43,7 @@ const Application = sequelize.define("applications", {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
+    unique: true,
   },
   dealId: {
     type: DataTypes.INTEGER,
@@ -154,7 +155,6 @@ const ApplicationCompletion = sequelize.define("application_completions", {
       key: "id",
     },
     allowNull: false,
-    unique: true
   },
 });
 
@@ -235,7 +235,7 @@ const Message = sequelize.define(
 User.hasMany(Application, { foreignKey: "userId" });
 Application.belongsTo(User, { foreignKey: "userId" });
 
-Application.hasOne(ApplicationCompletion, {
+Application.hasMany(ApplicationCompletion, {
   foreignKey: "applicationId",
 });
 
