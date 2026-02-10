@@ -14,7 +14,7 @@ router.post(
   authMiddleware,
   applicationController.changeStatus,
 );
-router.post('/:id/start-work', authMiddleware, applicationController.startWork)
+router.post('/:id/start-work', authMiddleware, applicationController.startApplication)
 router.post("/:id/complete", applicationController.completeApplication);
 
 module.exports = router;
