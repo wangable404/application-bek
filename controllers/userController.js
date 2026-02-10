@@ -177,7 +177,7 @@ class UserController {
         user.email,
         user.role,
       );
-      return res.json({ token });
+      return res.json({ token, user: {firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role} });
     } catch (err) {
       next(ApiError.badRequest(err.message));
     }
