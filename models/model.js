@@ -116,6 +116,10 @@ const Application = sequelize.define("applications", {
     defaultValue: "installation",
     comment: "Тип работ",
   },
+  returnComment: {
+    type: DataTypes.TEXT,
+    comment: "Комментарий при возврате на доработку",
+  },
   userId: {
     type: DataTypes.UUID,
     references: {

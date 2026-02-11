@@ -194,9 +194,26 @@ class ApplicationController {
     try {
       const { id, status } = req.params;
       const user = req.user;
+      const { comment } = req.body;
 
       if (user.role == "ADMIN") {
         const application = await Application.findOne({ where: { id } });
+
+        if (!application) {
+          return next(ApiError.badRequest("Заявка не найдена"));
+        }
+
+        if (status === "in_progress") {
+          // Проверяем, что комментарий предоставлен
+          if (!comment || !comment.trim()) {
+            return next(
+              ApiError.badRequest(
+                "Необходимо указать причину возврата на доработку",
+              ),
+            );
+          }
+          application.returnComment = comment;
+        }
         application.status = status;
         await application.save();
         return res.json(application);
