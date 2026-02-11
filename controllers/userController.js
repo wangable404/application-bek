@@ -26,6 +26,7 @@ class UserController {
         email,
         password,
         role,
+        isVerified: true
       });
       return res.json(create);
     } catch (err) {
