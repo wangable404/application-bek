@@ -12,6 +12,6 @@ router.post('/resend-code', userController.resendCode)
 router.get('/auth/check', authMiddleware, userController.check)
 router.get('/admin', authMiddleware, userController.getAllAdmin)
 router.get('/', userController.getAll)
-router.delete('/:id', userController.delete)
+router.delete('/:id', authMiddleware, userController.delete)
 
 module.exports = router

@@ -26,7 +26,7 @@ class UserController {
         email,
         password,
         role,
-        isVerified: true
+        isVerified: true,
       });
       return res.json(create);
     } catch (err) {
@@ -178,7 +178,15 @@ class UserController {
         user.email,
         user.role,
       );
-      return res.json({ token, user: {firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role} });
+      return res.json({
+        token,
+        user: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+        },
+      });
     } catch (err) {
       next(ApiError.badRequest(err.message));
     }
@@ -258,20 +266,20 @@ class UserController {
     }
   }
 
-  async delete(req,res,next){
+  async delete(req, res, next) {
     try {
-      const {id} = req.params;
+      const id = req.user.id;
       const user = await User.findByPk(id);
-      if(!user){
+      if (!user) {
         return next(ApiError.notFound("Пользователь не найден"));
       }
 
-      if(user.role !== "ADMIN"){
+      if (user.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
 
       await user.destroy();
-      return res.json({message:"Пользователь удален"});
+      return res.json({ message: "Пользователь удален" });
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
