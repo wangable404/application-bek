@@ -3,6 +3,7 @@ const userController = require('../controllers/userController')
 const authMiddleware = require('../middleware/middleware')
 const router = new Router()
 
+router.post('/create', userController.create)
 router.post('/registration', userController.registration)
 router.post('/login', userController.login)
 router.patch('/:id', authMiddleware, userController.update);
