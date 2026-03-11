@@ -15,7 +15,7 @@ class UserController {
     try {
       const user = req.user;
 
-      if (user.role == "ADMIN") {
+      if (user.role !== "ADMIN") {
         return next(ApiError.badRequest("Нет доступа"));
       }
 
