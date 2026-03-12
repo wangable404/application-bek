@@ -65,7 +65,7 @@ class UserController {
         });
 
         await sendVerificationMail(email, code);
-
+        
         return res.json({
           message: "Код подтверждения повторно отправлен на почту",
         });

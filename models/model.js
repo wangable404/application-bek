@@ -101,6 +101,12 @@ const Application = sequelize.define("applications", {
   relay: {
     type: DataTypes.STRING,
   },
+  products: {
+    type: DataTypes.STRING,
+  },
+  priceStreet: {
+    type: DataTypes.STRING,
+  },
   agreedDate: {
     type: DataTypes.DATEONLY,
   },
