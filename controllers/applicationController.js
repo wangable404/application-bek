@@ -23,6 +23,8 @@ class ApplicationController {
         carQuantity,
         carBrand,
         comment,
+        products,
+        priceStreet,
         allCarQuantity,
         forFreight,
         forCars,
@@ -48,6 +50,8 @@ class ApplicationController {
           application.clientPhone = clientPhone;
           application.city = city;
           application.type = type;
+          application.priceStreet = priceStreet;
+          application.products = products;
           application.carQuantity = carQuantity;
           application.carBrand = carBrand;
           application.comment = comment;
@@ -71,6 +75,8 @@ class ApplicationController {
         clientPhone,
         city,
         type,
+        priceStreet,
+        products,
         carQuantity,
         carBrand,
         comment,
