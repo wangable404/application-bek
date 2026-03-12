@@ -20,11 +20,14 @@ class UserController {
       }
 
       const { firstName, lastName, email, password, role } = req.body;
+
+      const hashPassword = await bcrypt.hash(password, 10);
+
       const create = await User.create({
         firstName,
         lastName,
         email,
-        password,
+        password: hashPassword,
         role,
         isVerified: true,
       });
