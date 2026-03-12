@@ -138,6 +138,10 @@ class ApplicationController {
             model: User,
             attributes: ["id", "firstName", "lastName", "email", "role"],
           },
+          {
+            model: ApplicationCompletion,
+            include: { model: ApplicationPhoto },
+          },
         ],
       });
       return res.json(application);
@@ -262,8 +266,11 @@ class ApplicationController {
 
     try {
       const { id } = req.params;
-      const { equipment, actSigned, completionComment } = req.body;
-
+      const { equipment, actSigned, completionComment, cars, sendType } = req.body;
+      console.log('==============');
+      console.log(sendType);
+      console.log('==============');
+      
       const application = await Application.findByPk(id, { transaction });
       if (!application) {
         await transaction.rollback();
@@ -284,23 +291,115 @@ class ApplicationController {
         );
       }
 
+      // Парсим данные
+      let parsedEquipment = [];
+      let parsedCars = [];
+
+      try {
+        parsedEquipment = JSON.parse(equipment);
+
+        // Если есть cars, парсим их
+        if (cars) {
+          parsedCars = JSON.parse(cars);
+        } else {
+          // Если cars нет, создаем структуру из equipment и фото
+          // Это для обратной совместимости
+          parsedCars = [
+            {
+              id: "1",
+              brand: application.carBrand || "",
+              licensePlate: "",
+              imei: "",
+              imeiPhoto: null,
+              equipment: parsedEquipment,
+              photos: [],
+            },
+          ];
+        }
+      } catch (e) {
+        await transaction.rollback();
+        return next(ApiError.badRequest("Ошибка парсинга данных"));
+      }
+
+      // Валидация структуры cars
+      if (!Array.isArray(parsedCars) || parsedCars.length === 0) {
+        await transaction.rollback();
+        return next(ApiError.badRequest("Данные об автомобилях некорректны"));
+      }
+
+      for (const [index, car] of parsedCars.entries()) {
+        if (!car.brand || !car.licensePlate) {
+          await transaction.rollback();
+          return next(
+            ApiError.badRequest(
+              `Автомобиль ${index + 1}: не указаны марка или гос номер`,
+            ),
+          );
+        }
+
+        if (!car.imei && !car.imeiPhoto) {
+          await transaction.rollback();
+          return next(
+            ApiError.badRequest(
+              `Автомобиль ${index + 1}: необходимо указать IMEI или загрузить фото IMEI`,
+            ),
+          );
+        }
+
+        if (!car.equipment || car.equipment.length === 0) {
+          await transaction.rollback();
+          return next(
+            ApiError.badRequest(
+              `Автомобиль ${index + 1}: необходимо добавить оборудование`,
+            ),
+          );
+        }
+
+        for (const [eqIndex, eq] of car.equipment.entries()) {
+          if (!eq.name || !eq.serialNumber) {
+            await transaction.rollback();
+            return next(
+              ApiError.badRequest(
+                `Автомобиль ${index + 1}, оборудование ${eqIndex + 1}: заполните все поля`,
+              ),
+            );
+          }
+        }
+      }
+
+      // Создаем запись о завершении
       const completion = await ApplicationCompletion.create(
         {
           applicationId: id,
-          equipment: JSON.parse(equipment),
+          equipment: parsedEquipment, // Для обратной совместимости
+          cars: parsedCars, // Новая структура
           actSigned: JSON.parse(actSigned),
           completionComment: completionComment || null,
         },
         { transaction },
       );
 
+      // Обрабатываем фото
       const files = Array.isArray(req.files.photos)
         ? req.files.photos
         : [req.files.photos];
 
       const photos = [];
 
-      for (const file of files) {
+      // Создаем мапу для сопоставления фото с carId и photoType
+      // Для этого нам нужно, чтобы клиент отправлял метаданные для каждого фото
+      // Например, в отдельном поле photoMetadata
+      let photoMetadata = [];
+      if (req.body.photoMetadata) {
+        try {
+          photoMetadata = JSON.parse(req.body.photoMetadata);
+        } catch (e) {
+          console.warn("Ошибка парсинга photoMetadata", e);
+        }
+      }
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
         const uploadPath = path.resolve(
           __dirname,
@@ -312,15 +411,26 @@ class ApplicationController {
 
         await file.mv(uploadPath);
 
-        photos.push({
+        const photoRecord = {
           completionId: completion.id,
           path: "/uploads/" + uniqueName,
-        });
+        };
+
+        // Если есть метаданные для этого фото, добавляем carId и photoType
+        if (photoMetadata[i]) {
+          photoRecord.carId = photoMetadata[i].carId;
+          photoRecord.photoType = photoMetadata[i].photoType || "car";
+        }
+
+        photos.push(photoRecord);
       }
 
       await ApplicationPhoto.bulkCreate(photos, { transaction });
 
-      await application.update({ status: "review" }, { transaction });
+      if(sendType == 'default'){
+        console.log(true);
+        await application.update({ status: "review" }, { transaction });
+      }
 
       await transaction.commit();
 
@@ -332,17 +442,25 @@ class ApplicationController {
     } catch (e) {
       await transaction.rollback();
 
-      if (req.files?.length) {
-        for (const file of req.files) {
-          const fullPath = path.resolve(
-            process.cwd(),
-            "static",
-            "uploads",
-            file.filename,
-          );
+      // Удаляем загруженные файлы при ошибке
+      if (req.files?.photos) {
+        const files = Array.isArray(req.files.photos)
+          ? req.files.photos
+          : [req.files.photos];
 
-          if (fs.existsSync(fullPath)) {
-            fs.unlinkSync(fullPath);
+        for (const file of files) {
+          try {
+            const fullPath = path.resolve(
+              process.cwd(),
+              "static",
+              "uploads",
+              file.name,
+            );
+            if (fs.existsSync(fullPath)) {
+              fs.unlinkSync(fullPath);
+            }
+          } catch (unlinkError) {
+            console.error("Ошибка при удалении файла:", unlinkError);
           }
         }
       }

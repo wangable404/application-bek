@@ -143,9 +143,16 @@ const ApplicationCompletion = sequelize.define("application_completions", {
     defaultValue: DataTypes.UUIDV4,
   },
 
+  cars: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+    comment: "Массив автомобилей с их оборудованием и фото",
+  },
+
   equipment: {
     type: DataTypes.JSONB,
     allowNull: false,
+    comment: "Для обратной совместимости - все оборудование плоским списком",
   },
 
   actSigned: {
@@ -187,6 +194,18 @@ const ApplicationPhoto = sequelize.define("application_photos", {
       key: "id",
     },
     allowNull: false,
+  },
+  
+  carId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: "ID автомобиля из cars массива, к которому относится фото",
+  },
+  
+  photoType: {
+    type: DataTypes.ENUM('car', 'imei'),
+    defaultValue: 'car',
+    comment: "Тип фото: обычное или IMEI",
   },
 });
 
