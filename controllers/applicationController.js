@@ -43,6 +43,11 @@ class ApplicationController {
         },
       });
 
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
+
       if (application) {
         if (application.status === "rejected") {
           application.status = "pending";
@@ -66,6 +71,15 @@ class ApplicationController {
 
           await application.save();
         }
+
+        await sendPush(
+          tokens.map((t) => t.token),
+          "Новая заявка",
+          "У вас появилась новая заявка на работу",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
 
         return res.json(application);
       }
@@ -93,11 +107,6 @@ class ApplicationController {
 
       await Chat.create({ applicationId: newApplication.id });
 
-      const tokens = await PushToken.findAll({
-        where: { userId },
-        attributes: ["token"],
-      });
-
       await sendPush(
         tokens.map((t) => t.token),
         "Новая заявка",
@@ -115,10 +124,10 @@ class ApplicationController {
   }
   async push(req, res, next) {
     try {
-      console.log('nachal');
-      
+      console.log("nachal");
+
       const tokens = await PushToken.findAll({
-        where: { userId: 'aa5c7e3a-b226-48f3-8181-8bfe50ca28f4' },
+        where: { userId: "aa5c7e3a-b226-48f3-8181-8bfe50ca28f4" },
         attributes: ["token"],
       });
 
