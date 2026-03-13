@@ -4,6 +4,10 @@ import PushToken from "../models/PushToken.js";
 const expo = new Expo();
 
 export async function sendPush(tokens, title, body, data = {}) {
+  console.log('================');
+  console.log('started');
+  console.log('================');
+  
   const messages = tokens
     .filter((t) => Expo.isExpoPushToken(t))
     .map((token) => ({
