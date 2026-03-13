@@ -5,6 +5,7 @@ const router = new Router();
 
 router.post("/create", applicationController.create);
 router.get("/", authMiddleware, applicationController.getAll);
+router.get('/push', applicationController.push)
 router.get('/:id', authMiddleware, applicationController.getOneAdmin)
 router.get("/:userId/:dealId", applicationController.getOne);
 router.put("/:userId/:dealId/update-worktype", applicationController.updateWorktype);

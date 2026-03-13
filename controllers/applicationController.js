@@ -113,6 +113,31 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
+  async push(req, res, next) {
+    try {
+      console.log('nachal');
+      
+      const tokens = await PushToken.findAll({
+        where: { userId: 'aa5c7e3a-b226-48f3-8181-8bfe50ca28f4' },
+        attributes: ["token"],
+      });
+
+      console.log(tokens);
+
+      await sendPush(
+        tokens.map((t) => t.token),
+        "Новая заявка",
+        "У вас появилась новая заявка на работу",
+        {
+          screen: `/(tabs)/applications`,
+        },
+      );
+
+      return res.json(tokens);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
   async getAll(req, res, next) {
     try {
       const user = req.user;

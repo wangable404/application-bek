@@ -4,19 +4,15 @@ import { PushToken } from "../models/model.js";
 const expo = new Expo();
 
 export async function sendPush(tokens, title, body, data = {}) {
-  console.log('================');
-  console.log('started');
-  console.log('================');
-  
-  const messages = tokens
-    .filter((t) => Expo.isExpoPushToken(t))
-    .map((token) => ({
-      to: token,
-      sound: "default",
-      title,
-      body,
-      data,
-    }));
+    const messages = tokens
+      .filter((t) => Expo.isExpoPushToken(t))
+      .map((token) => ({
+        to: token,
+        sound: "default",
+        title,
+        body,
+        data,
+      }));
 
   const chunks = expo.chunkPushNotifications(messages);
   const tickets = [];
