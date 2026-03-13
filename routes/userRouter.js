@@ -4,6 +4,7 @@ const authMiddleware = require('../middleware/middleware')
 const router = new Router()
 
 router.post('/create', authMiddleware, userController.create)
+router.post('/push-token', authMiddleware, userController.savePushToken)
 router.post('/registration', userController.registration)
 router.post('/login', userController.login)
 router.patch('/:id', authMiddleware, userController.update);

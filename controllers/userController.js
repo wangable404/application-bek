@@ -1,4 +1,4 @@
-const { User } = require("../models/model");
+const { User, PushToken } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
@@ -36,6 +36,26 @@ class UserController {
       return next(ApiError.badRequest(err.message));
     }
   }
+  async savePushToken(req, res) {
+    const { token } = req.body;
+    const userId = req.user.id;
+
+    const existing = await PushToken.findOne({
+      where: { token, userId },
+    });
+
+    if (!existing) {
+      const other = await PushToken.findOne({ where: { token } });
+      if (other) {
+        other.userId = userId;
+        await other.save();
+      } else {
+        await PushToken.create({ token, userId });
+      }
+    }
+
+    res.json({ success: true });
+  }
   async registration(req, res, next) {
     try {
       const { firstName, lastName, email, password } = req.body;
@@ -65,7 +85,7 @@ class UserController {
         });
 
         await sendVerificationMail(email, code);
-        
+
         return res.json({
           message: "Код подтверждения повторно отправлен на почту",
         });

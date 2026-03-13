@@ -7,6 +7,7 @@ const {
   ApplicationPhoto,
   Chat,
   Message,
+  PushToken,
 } = require("../models/model");
 const sequelize = require("../db");
 
@@ -90,6 +91,20 @@ class ApplicationController {
       });
 
       await Chat.create({ applicationId: newApplication.id });
+
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
+
+      await sendPush(
+        tokens.map((t) => t.token),
+        "Новая заявка",
+        "У вас появилась новая заявка на работу",
+        {
+          screen: `/(tabs)/applications`,
+        },
+      );
 
       return res.json(newApplication);
     } catch (err) {
@@ -266,11 +281,12 @@ class ApplicationController {
 
     try {
       const { id } = req.params;
-      const { equipment, actSigned, completionComment, cars, sendType } = req.body;
-      console.log('==============');
+      const { equipment, actSigned, completionComment, cars, sendType } =
+        req.body;
+      console.log("==============");
       console.log(sendType);
-      console.log('==============');
-      
+      console.log("==============");
+
       const application = await Application.findByPk(id, { transaction });
       if (!application) {
         await transaction.rollback();
@@ -427,7 +443,7 @@ class ApplicationController {
 
       await ApplicationPhoto.bulkCreate(photos, { transaction });
 
-      if(sendType == 'default'){
+      if (sendType == "default") {
         console.log(true);
         await application.update({ status: "review" }, { transaction });
       }

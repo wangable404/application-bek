@@ -38,6 +38,26 @@ const User = sequelize.define("users", {
   },
 });
 
+const PushToken = sequelize.define('push_tokens', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  token: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  userId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+  },
+})
+
 const Application = sequelize.define("applications", {
   id: {
     type: DataTypes.INTEGER,
@@ -277,6 +297,9 @@ const Message = sequelize.define(
   { timestamps: true },
 );
 
+User.hasMany(PushToken, { foreignKey: "userId" });
+PushToken.belongsTo(User, { foreignKey: "userId" });
+
 User.hasMany(Application, { foreignKey: "userId" });
 Application.belongsTo(User, { foreignKey: "userId" });
 
@@ -307,6 +330,7 @@ Message.belongsTo(User, { foreignKey: "senderId" });
 
 module.exports = {
   User,
+  PushToken,
   Application,
   ApplicationCompletion,
   ApplicationPhoto,
