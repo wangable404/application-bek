@@ -10,6 +10,7 @@ const {
   PushToken,
 } = require("../models/model");
 const sequelize = require("../db");
+const { sendPush } = require("../services/push.service");
 
 class ApplicationController {
   async create(req, res, next) {
