@@ -17,6 +17,7 @@
     "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-fileupload": "^1.5.2",
+    "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "nodemailer": "^7.0.13",

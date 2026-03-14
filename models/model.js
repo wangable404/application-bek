@@ -38,7 +38,7 @@ const User = sequelize.define("users", {
   },
 });
 
-const PushToken = sequelize.define('push_tokens', {
+const PushToken = sequelize.define("push_tokens", {
   id: {
     type: DataTypes.UUID,
     defaultValue: DataTypes.UUIDV4,
@@ -56,7 +56,7 @@ const PushToken = sequelize.define('push_tokens', {
     },
     allowNull: false,
   },
-})
+});
 
 const Application = sequelize.define("applications", {
   id: {
@@ -146,6 +146,14 @@ const Application = sequelize.define("applications", {
     type: DataTypes.TEXT,
     comment: "Комментарий при возврате на доработку",
   },
+  completionComment: {
+    type: DataTypes.TEXT,
+    comment: "Комментарий при завершении работы",
+  },
+  actSigned: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
   userId: {
     type: DataTypes.UUID,
     references: {
@@ -162,29 +170,14 @@ const ApplicationCompletion = sequelize.define("application_completions", {
     primaryKey: true,
     defaultValue: DataTypes.UUIDV4,
   },
-
-  cars: {
-    type: DataTypes.JSONB,
+  brand: {
+    type: DataTypes.STRING,
     allowNull: false,
-    comment: "Массив автомобилей с их оборудованием и фото",
   },
-
-  equipment: {
-    type: DataTypes.JSONB,
+  stateNumber: {
+    type: DataTypes.STRING,
     allowNull: false,
-    comment: "Для обратной совместимости - все оборудование плоским списком",
   },
-
-  actSigned: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false,
-  },
-
-  completionComment: {
-    type: DataTypes.TEXT,
-    comment: "Комментарий при сдаче работы",
-  },
-
   applicationId: {
     type: DataTypes.INTEGER,
     references: {
@@ -195,39 +188,57 @@ const ApplicationCompletion = sequelize.define("application_completions", {
   },
 });
 
-const ApplicationPhoto = sequelize.define("application_photos", {
-  id: {
-    type: DataTypes.UUID,
-    primaryKey: true,
-    defaultValue: DataTypes.UUIDV4,
-  },
-
-  path: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-
-  completionId: {
-    type: DataTypes.UUID,
-    references: {
-      model: ApplicationCompletion,
-      key: "id",
+const ApplicationCompletionEquipment = sequelize.define(
+  "application_completion_equipments",
+  {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
     },
-    allowNull: false,
+    equipment: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    imei: {
+      type: DataTypes.STRING,
+    },
+    imeiPhoto: {
+      type: DataTypes.STRING,
+    },
+    completionId: {
+      type: DataTypes.UUID,
+      references: {
+        model: ApplicationCompletion,
+        key: "id",
+      },
+      allowNull: false,
+    },
   },
-  
-  carId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    comment: "ID автомобиля из cars массива, к которому относится фото",
+);
+
+const ApplicationCompletionPhoto = sequelize.define(
+  "application_completion_photos",
+  {
+    id: {
+      type: DataTypes.UUID,
+      primaryKey: true,
+      defaultValue: DataTypes.UUIDV4,
+    },
+    path: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    completionId: {
+      type: DataTypes.UUID,
+      references: {
+        model: ApplicationCompletion,
+        key: "id",
+      },
+      allowNull: false,
+    },
   },
-  
-  photoType: {
-    type: DataTypes.ENUM('car', 'imei'),
-    defaultValue: 'car',
-    comment: "Тип фото: обычное или IMEI",
-  },
-});
+);
 
 const Chat = sequelize.define("chats", {
   id: {
@@ -311,11 +322,21 @@ ApplicationCompletion.belongsTo(Application, {
   foreignKey: "applicationId",
 });
 
-ApplicationCompletion.hasMany(ApplicationPhoto, {
+ApplicationCompletion.hasMany(ApplicationCompletionEquipment, {
+  as: "equipments",
   foreignKey: "completionId",
 });
 
-ApplicationPhoto.belongsTo(ApplicationCompletion, {
+ApplicationCompletionEquipment.belongsTo(ApplicationCompletion, {
+  foreignKey: "completionId",
+});
+
+ApplicationCompletion.hasMany(ApplicationCompletionPhoto, {
+  as: "photos",
+  foreignKey: "completionId",
+});
+
+ApplicationCompletionPhoto.belongsTo(ApplicationCompletion, {
   foreignKey: "completionId",
 });
 
@@ -333,7 +354,8 @@ module.exports = {
   PushToken,
   Application,
   ApplicationCompletion,
-  ApplicationPhoto,
+  ApplicationCompletionEquipment,
+  ApplicationCompletionPhoto,
   Chat,
   Message,
 };

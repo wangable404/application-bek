@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 const ApiError = require("../error/ApiError");
 const {
   Application,
@@ -8,9 +9,23 @@ const {
   Chat,
   Message,
   PushToken,
+  ApplicationCompletionEquipment,
+  ApplicationCompletionPhoto,
 } = require("../models/model");
 const sequelize = require("../db");
 const { sendPush } = require("../services/push.service");
+
+async function deleteFileIfExists(filePath) {
+  if (!filePath) return;
+  // Предполагается, что в БД путь хранится как "/uploads/...", а физически файл лежит в "static/uploads"
+  const fullPath = path.join(__dirname, "../static", filePath);
+  try {
+    await fs.access(fullPath);
+    await fs.unlink(fullPath);
+  } catch (err) {
+    // файла нет – игнорируем
+  }
+}
 
 class ApplicationController {
   async create(req, res, next) {
@@ -122,31 +137,6 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
-  async push(req, res, next) {
-    try {
-      console.log("nachal");
-
-      const tokens = await PushToken.findAll({
-        where: { userId: "aa5c7e3a-b226-48f3-8181-8bfe50ca28f4" },
-        attributes: ["token"],
-      });
-
-      console.log(tokens);
-
-      await sendPush(
-        tokens.map((t) => t.token),
-        "Новая заявка",
-        "У вас появилась новая заявка на работу",
-        {
-          screen: `/(tabs)/applications`,
-        },
-      );
-
-      return res.json(tokens);
-    } catch (err) {
-      return next(ApiError.badRequest(err.message));
-    }
-  }
   async getAll(req, res, next) {
     try {
       const user = req.user;
@@ -157,7 +147,10 @@ class ApplicationController {
             { model: User },
             {
               model: ApplicationCompletion,
-              include: { model: ApplicationPhoto },
+              include: [
+                { model: ApplicationCompletionEquipment },
+                { model: ApplicationCompletionPhoto },
+              ],
             },
           ],
         });
@@ -170,6 +163,16 @@ class ApplicationController {
           {
             model: Chat,
             include: [{ model: Message, order: [["createdAt", "DESC"]] }],
+          },
+          {
+            model: ApplicationCompletion,
+            include: [
+              {
+                model: ApplicationCompletionEquipment,
+                as: "equipments",
+              },
+              { model: ApplicationCompletionPhoto, as: "photos" },
+            ],
           },
         ],
       });
@@ -190,7 +193,13 @@ class ApplicationController {
           },
           {
             model: ApplicationCompletion,
-            include: { model: ApplicationPhoto },
+            include: [
+              {
+                model: ApplicationCompletionEquipment,
+                as: "equipments",
+              },
+              { model: ApplicationCompletionPhoto, as: "photos" },
+            ],
           },
         ],
       });
@@ -227,7 +236,16 @@ class ApplicationController {
       where: { id: id },
       include: [
         { model: User },
-        { model: ApplicationCompletion, include: { model: ApplicationPhoto } },
+        {
+          model: ApplicationCompletion,
+          include: [
+            {
+              model: ApplicationCompletionEquipment,
+              as: "equipments",
+            },
+            { model: ApplicationCompletionPhoto, as: "photos" },
+          ],
+        },
       ],
     });
 
@@ -263,8 +281,12 @@ class ApplicationController {
           return next(ApiError.badRequest("Заявка не найдена"));
         }
 
+        const tokens = await PushToken.findAll({
+          where: { userId: user.id },
+          attributes: ["token"],
+        });
+
         if (status === "in_progress") {
-          // Проверяем, что комментарий предоставлен
           if (!comment || !comment.trim()) {
             return next(
               ApiError.badRequest(
@@ -276,6 +298,16 @@ class ApplicationController {
         }
         application.status = status;
         await application.save();
+
+        await sendPush(
+          tokens.map((t) => t.token),
+          "Заявка отклонена",
+          "Заявка отклонена со стороны диспетчеров",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+
         return res.json(application);
       }
 
@@ -312,212 +344,329 @@ class ApplicationController {
   }
 
   async completeApplication(req, res, next) {
-    const transaction = await sequelize.transaction();
-
     try {
-      const { id } = req.params;
-      const { equipment, actSigned, completionComment, cars, sendType } =
-        req.body;
-      console.log("==============");
-      console.log(sendType);
-      console.log("==============");
+      const { id } = req.params; // applicationId
+      const { brand, stateNumber, sendType } = req.body;
 
-      const application = await Application.findByPk(id, { transaction });
-      if (!application) {
-        await transaction.rollback();
-        return next(ApiError.badRequest("Заявка не найдена"));
+      if (!brand || !stateNumber) {
+        return next(ApiError.badRequest("Не указаны марка или госномер"));
       }
 
-      if (application.status !== "in_progress") {
-        await transaction.rollback();
-        return next(
-          ApiError.badRequest("Заявка не находится в статусе 'in_progress'"),
-        );
-      }
+      // --- Сбор оборудования из req.body ---
+      const equipmentMap = {};
 
-      if (!req.files || !req.files.photos) {
-        await transaction.rollback();
-        return next(
-          ApiError.badRequest("Необходимо загрузить фото выполнения"),
-        );
-      }
-
-      // Парсим данные
-      let parsedEquipment = [];
-      let parsedCars = [];
-
-      try {
-        parsedEquipment = JSON.parse(equipment);
-
-        // Если есть cars, парсим их
-        if (cars) {
-          parsedCars = JSON.parse(cars);
-        } else {
-          // Если cars нет, создаем структуру из equipment и фото
-          // Это для обратной совместимости
-          parsedCars = [
-            {
-              id: "1",
-              brand: application.carBrand || "",
-              licensePlate: "",
-              imei: "",
-              imeiPhoto: null,
-              equipment: parsedEquipment,
-              photos: [],
-            },
-          ];
-        }
-      } catch (e) {
-        await transaction.rollback();
-        return next(ApiError.badRequest("Ошибка парсинга данных"));
-      }
-
-      // Валидация структуры cars
-      if (!Array.isArray(parsedCars) || parsedCars.length === 0) {
-        await transaction.rollback();
-        return next(ApiError.badRequest("Данные об автомобилях некорректны"));
-      }
-
-      for (const [index, car] of parsedCars.entries()) {
-        if (!car.brand || !car.licensePlate) {
-          await transaction.rollback();
-          return next(
-            ApiError.badRequest(
-              `Автомобиль ${index + 1}: не указаны марка или гос номер`,
-            ),
-          );
-        }
-
-        if (!car.imei && !car.imeiPhoto) {
-          await transaction.rollback();
-          return next(
-            ApiError.badRequest(
-              `Автомобиль ${index + 1}: необходимо указать IMEI или загрузить фото IMEI`,
-            ),
-          );
-        }
-
-        if (!car.equipment || car.equipment.length === 0) {
-          await transaction.rollback();
-          return next(
-            ApiError.badRequest(
-              `Автомобиль ${index + 1}: необходимо добавить оборудование`,
-            ),
-          );
-        }
-
-        for (const [eqIndex, eq] of car.equipment.entries()) {
-          if (!eq.name || !eq.serialNumber) {
-            await transaction.rollback();
-            return next(
-              ApiError.badRequest(
-                `Автомобиль ${index + 1}, оборудование ${eqIndex + 1}: заполните все поля`,
-              ),
-            );
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
+        if (match) {
+          const index = match[1];
+          const field = match[2];
+          if (field === "equipment" || field === "imei") {
+            if (!equipmentMap[index]) equipmentMap[index] = {};
+            equipmentMap[index][field] = req.body[key];
           }
         }
-      }
-
-      // Создаем запись о завершении
-      const completion = await ApplicationCompletion.create(
-        {
-          applicationId: id,
-          equipment: parsedEquipment, // Для обратной совместимости
-          cars: parsedCars, // Новая структура
-          actSigned: JSON.parse(actSigned),
-          completionComment: completionComment || null,
-        },
-        { transaction },
-      );
-
-      // Обрабатываем фото
-      const files = Array.isArray(req.files.photos)
-        ? req.files.photos
-        : [req.files.photos];
-
-      const photos = [];
-
-      // Создаем мапу для сопоставления фото с carId и photoType
-      // Для этого нам нужно, чтобы клиент отправлял метаданные для каждого фото
-      // Например, в отдельном поле photoMetadata
-      let photoMetadata = [];
-      if (req.body.photoMetadata) {
-        try {
-          photoMetadata = JSON.parse(req.body.photoMetadata);
-        } catch (e) {
-          console.warn("Ошибка парсинга photoMetadata", e);
-        }
-      }
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
-        const uploadPath = path.resolve(
-          __dirname,
-          "..",
-          "static",
-          "uploads",
-          uniqueName,
-        );
-
-        await file.mv(uploadPath);
-
-        const photoRecord = {
-          completionId: completion.id,
-          path: "/uploads/" + uniqueName,
-        };
-
-        // Если есть метаданные для этого фото, добавляем carId и photoType
-        if (photoMetadata[i]) {
-          photoRecord.carId = photoMetadata[i].carId;
-          photoRecord.photoType = photoMetadata[i].photoType || "car";
-        }
-
-        photos.push(photoRecord);
-      }
-
-      await ApplicationPhoto.bulkCreate(photos, { transaction });
-
-      if (sendType == "default") {
-        console.log(true);
-        await application.update({ status: "review" }, { transaction });
-      }
-
-      await transaction.commit();
-
-      return res.json({
-        success: true,
-        completion,
-        message: "Работа успешно сдана на проверку",
       });
-    } catch (e) {
-      await transaction.rollback();
 
-      // Удаляем загруженные файлы при ошибке
-      if (req.files?.photos) {
-        const files = Array.isArray(req.files.photos)
+      // --- Подготовка к перемещению файлов ---
+      const movePromises = [];
+
+      // Обработка файлов imeiPhoto
+      if (req.files) {
+        Object.keys(req.files).forEach((key) => {
+          const match = key.match(/^equipment\[(\d+)\]\.imeiPhoto$/);
+          if (match) {
+            const index = match[1];
+            const file = req.files[key]; // это один файл
+            if (!equipmentMap[index]) equipmentMap[index] = {};
+
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
+            const uploadPath = `static/uploads/${fileName}`;
+
+            const movePromise = new Promise((resolve, reject) => {
+              file.mv(uploadPath, (err) => {
+                if (err) reject(err);
+                else resolve({ index, fileName });
+              });
+            });
+            movePromises.push(movePromise);
+          }
+        });
+      }
+
+      // Обработка фотографий автомобиля (photos)
+      let photoFiles = [];
+      if (req.files && req.files.photos) {
+        photoFiles = Array.isArray(req.files.photos)
           ? req.files.photos
           : [req.files.photos];
+      }
 
-        for (const file of files) {
-          try {
-            const fullPath = path.resolve(
-              process.cwd(),
-              "static",
-              "uploads",
-              file.name,
-            );
-            if (fs.existsSync(fullPath)) {
-              fs.unlinkSync(fullPath);
-            }
-          } catch (unlinkError) {
-            console.error("Ошибка при удалении файла:", unlinkError);
+      if (photoFiles.length === 0) {
+        return next(ApiError.badRequest("Не загружены фотографии автомобиля"));
+      }
+
+      const photoMovePromises = photoFiles.map((file, idx) => {
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
+        const uploadPath = `static/uploads/${fileName}`;
+        return new Promise((resolve, reject) => {
+          file.mv(uploadPath, (err) => {
+            if (err) reject(err);
+            else resolve(fileName);
+          });
+        });
+      });
+
+      // Ждём перемещения всех файлов
+      const [imeiResults, photoFileNames] = await Promise.all([
+        Promise.all(movePromises),
+        Promise.all(photoMovePromises),
+      ]);
+
+      // Обновляем equipmentMap именами сохранённых imeiPhoto
+      imeiResults.forEach(({ index, fileName }) => {
+        if (equipmentMap[index]) {
+          equipmentMap[index].imeiPhoto = fileName;
+        }
+      });
+
+      // Преобразуем equipmentMap в массив
+      const equipmentArray = Object.keys(equipmentMap)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .map((idx) => equipmentMap[idx]);
+
+      // --- Создание записи завершения ---
+      const completion = await ApplicationCompletion.create({
+        brand,
+        stateNumber,
+        applicationId: id,
+      });
+
+      // --- Сохранение оборудования ---
+      for (const eq of equipmentArray) {
+        if (!eq.equipment) continue; // пропускаем незаполненное оборудование
+        await ApplicationCompletionEquipment.create({
+          equipment: eq.equipment,
+          imei: eq.imei || null,
+          imeiPhoto: `/uploads/${eq.imeiPhoto}` || null,
+          completionId: completion.id,
+        });
+      }
+
+      // --- Сохранение фотографий автомобиля ---
+      for (const fileName of photoFileNames) {
+        await ApplicationCompletionPhoto.create({
+          path: `/uploads/${fileName}`,
+          completionId: completion.id,
+        });
+      }
+
+      if (sendType == "default") {
+        await Application.update({ status: "review" }, { where: { id } });
+      }
+
+      return res.json({ success: true, completionId: completion.id });
+    } catch (err) {
+      console.error(err);
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+  async updateCompleteApplication(req, res, next) {
+    try {
+      const { completionId } = req.params;
+      const { brand, stateNumber, sendType } = req.body;
+
+      if (!brand || !stateNumber) {
+        return next(ApiError.badRequest("Не указаны марка или госномер"));
+      }
+
+      const completion = await ApplicationCompletion.findByPk(completionId, {
+        include: [
+          { model: ApplicationCompletionEquipment, as: "equipments" },
+          { model: ApplicationCompletionPhoto, as: "photos" },
+        ],
+      });
+
+      if (!completion) {
+        return next(ApiError.notFound("Завершение не найдено"));
+      }
+
+      // 1. Обновляем основные поля
+      await completion.update({ brand, stateNumber });
+
+      // 2. Обработка фото автомобиля
+      let existingPhotoIds = req.body.existingPhotos;
+      if (existingPhotoIds && !Array.isArray(existingPhotoIds)) {
+        existingPhotoIds = [existingPhotoIds];
+      }
+      existingPhotoIds = existingPhotoIds || [];
+
+      // Удаляем фото, которых нет в списке существующих
+      const photosToDelete = completion.photos.filter(
+        (p) => !existingPhotoIds.includes(p.id),
+      );
+      for (const photo of photosToDelete) {
+        await deleteFileIfExists(photo.path);
+        await photo.destroy();
+      }
+
+      // Добавляем новые фото из файлов
+      let photoFiles = [];
+      if (req.files && req.files.photos) {
+        photoFiles = Array.isArray(req.files.photos)
+          ? req.files.photos
+          : [req.files.photos];
+      }
+      for (const file of photoFiles) {
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
+        const uploadPath = `static/uploads/${fileName}`;
+        await new Promise((resolve, reject) => {
+          file.mv(uploadPath, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        await ApplicationCompletionPhoto.create({
+          path: `/uploads/${fileName}`,
+          completionId: completion.id,
+        });
+      }
+
+      // 3. Обработка оборудования
+      // Собираем данные из тела
+      const equipmentMap = {};
+      Object.keys(req.body).forEach((key) => {
+        const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
+        if (match) {
+          const index = match[1];
+          const field = match[2];
+          if (!equipmentMap[index]) equipmentMap[index] = {};
+          equipmentMap[index][field] = req.body[key];
+        }
+      });
+
+      // Собираем файлы imeiPhoto
+      const imeiPhotoFiles = {};
+      if (req.files) {
+        Object.keys(req.files).forEach((key) => {
+          const match = key.match(/^equipment\[(\d+)\]\.imeiPhoto$/);
+          if (match) {
+            const index = match[1];
+            imeiPhotoFiles[index] = req.files[key];
+          }
+        });
+      }
+
+      // Обрабатываем каждую запись оборудования
+      for (const [idxStr, eqData] of Object.entries(equipmentMap)) {
+        const index = parseInt(idxStr);
+        const equipmentId = eqData.id; // id существующего оборудования (если есть)
+        let equipment;
+
+        if (equipmentId) {
+          // Найти существующее оборудование
+          equipment = completion.equipments.find((e) => e.id === equipmentId);
+          if (!equipment) continue; // на всякий случай пропускаем
+          // Обновляем текстовые поля
+          await equipment.update({
+            equipment: eqData.equipment || "",
+            imei: eqData.imei || null,
+          });
+        } else {
+          // Создаём новое оборудование
+          equipment = await ApplicationCompletionEquipment.create({
+            equipment: eqData.equipment || "",
+            imei: eqData.imei || null,
+            completionId: completion.id,
+          });
+        }
+
+        // Обработка imeiPhoto
+        const imeiPhotoFile = imeiPhotoFiles[index];
+        const imeiPhotoId = eqData.imeiPhotoId;
+
+        if (imeiPhotoFile) {
+          // Пришёл новый файл – заменяем старый (если есть)
+          if (equipment.imeiPhoto) {
+            await deleteFileIfExists(equipment.imeiPhoto);
+          }
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${imeiPhotoFile.name}`;
+          const uploadPath = `static/uploads/${fileName}`;
+          await new Promise((resolve, reject) => {
+            imeiPhotoFile.mv(uploadPath, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          await equipment.update({ imeiPhoto: `/uploads/${fileName}` });
+        } else if (imeiPhotoId) {
+          // Передан id существующего фото – ничего не меняем
+          // Можно дополнительно проверить, что id совпадает с текущим, но это необязательно
+        } else {
+          // Ни файла, ни id – значит фото удалено
+          if (equipment.imeiPhoto) {
+            await deleteFileIfExists(equipment.imeiPhoto);
+            await equipment.update({ imeiPhoto: null });
           }
         }
       }
 
-      console.error("Ошибка при сдаче работы:", e);
-      return next(ApiError.internal("Ошибка при сдаче работы"));
+      // Удаляем оборудование, которое не было упомянуто в запросе
+      const processedEquipmentIds = Object.values(equipmentMap)
+        .map((eq) => eq.id)
+        .filter((id) => id);
+      const equipmentToDelete = completion.equipments.filter(
+        (eq) => !processedEquipmentIds.includes(eq.id),
+      );
+      for (const eq of equipmentToDelete) {
+        if (eq.imeiPhoto) {
+          await deleteFileIfExists(eq.imeiPhoto);
+        }
+        await eq.destroy();
+      }
+
+      // Если sendType == "default" – меняем статус заявки
+      if (sendType === "default") {
+        await Application.update(
+          { status: "review" },
+          { where: { id: completion.applicationId } },
+        );
+      }
+
+      return res.json({ success: true, completionId: completion.id });
+    } catch (err) {
+      console.error(err);
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+  async deleteCompleteApplication(req, res, next) {
+    try {
+      const { completionId } = req.params;
+      const completion = await ApplicationCompletion.findByPk(completionId, {
+        include: [
+          { model: ApplicationCompletionEquipment, as: "equipments" },
+          { model: ApplicationCompletionPhoto, as: "photos" },
+        ],
+      });
+      if (!completion) {
+        return next(ApiError.notFound("Завершение не найдено"));
+      }
+
+      // Удаление файлов фото
+      for (const photo of completion.photos) {
+        await deleteFileIfExists(photo.path);
+      }
+      // Удаление файлов imeiPhoto
+      for (const eq of completion.equipments) {
+        if (eq.imeiPhoto) {
+          await deleteFileIfExists(eq.imeiPhoto);
+        }
+      }
+
+      await completion.destroy();
+      return res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      return next(ApiError.badRequest(err.message));
     }
   }
 }
