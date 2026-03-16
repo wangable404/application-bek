@@ -260,6 +260,21 @@ class ApplicationController {
       const application = await Application.findOne({
         where: { userId, dealId },
       });
+
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
+
+      await sendPush(
+        tokens.map((t) => t.token),
+        `Заявка отклонена`,
+        "Менеджер отклонил заявку",
+        {
+          screen: `/(tabs)/applications`,
+        },
+      );
+
       application.status = "rejected";
       await application.save();
       return res.json(application);
@@ -293,7 +308,26 @@ class ApplicationController {
               ),
             );
           }
+          await sendPush(
+            tokens.map((t) => t.token),
+            `🔥 Заявка в работе`,
+            "Можете начать или продолжить работу",
+            {
+              screen: `/(tabs)/applications`,
+            },
+          );
           application.returnComment = comment;
+        }
+
+        if (status == "rejected") {
+          await sendPush(
+            tokens.map((t) => t.token),
+            `Заявка отклонена`,
+            "Ваша работа отклонена",
+            {
+              screen: `/(tabs)/applications`,
+            },
+          );
         }
         application.status = status;
         await application.save();
@@ -350,7 +384,7 @@ class ApplicationController {
       if (status == "rejected") {
         await sendPush(
           tokens.map((t) => t.token),
-          `🎉 Заявка отклонена`,
+          `Заявка отклонена`,
           "Ваша работа отклонена",
           {
             screen: `/(tabs)/applications`,
