@@ -5,8 +5,8 @@ const bcrypt = require("bcrypt");
 const { sendVerificationMail } = require("../services/mailService");
 const uuid = require("uuid");
 
-const generateJwt = (id, firstName, lastName, email, role) => {
-  const payload = { id, firstName, lastName, email, role };
+const generateJwt = (id, firstName, lastName, email, city, phone, role) => {
+  const payload = { id, firstName, lastName, email, city, phone, role };
   return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
 };
 
@@ -19,7 +19,8 @@ class UserController {
         return next(ApiError.badRequest("Нет доступа"));
       }
 
-      const { firstName, lastName, phone, city, email, password, role } = req.body;
+      const { firstName, lastName, phone, city, email, password, role } =
+        req.body;
 
       const hashPassword = await bcrypt.hash(password, 10);
 
@@ -267,7 +268,8 @@ class UserController {
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { firstName, lastName, email, phone, city, password, role } = req.body;
+      const { firstName, lastName, email, phone, city, password, role } =
+        req.body;
       const authUser = req.user;
 
       if (authUser.role !== "ADMIN") {

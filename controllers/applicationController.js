@@ -285,114 +285,79 @@ class ApplicationController {
   async changeStatus(req, res, next) {
     try {
       const { id, status } = req.params;
-      const user = req.user;
       const { comment } = req.body;
+      const user = req.user;
 
+      const application = await Application.findOne({ where: { id } });
+
+      if (!application) {
+        return next(ApiError.badRequest("Заявка не найдена"));
+      }
+
+      // Получаем push токены
       const tokens = await PushToken.findAll({
         where: { userId: user.id },
         attributes: ["token"],
       });
 
-      if (user.role == "ADMIN") {
-        const application = await Application.findOne({ where: { id } });
+      const pushTokens = tokens.map((t) => t.token);
 
-        if (!application) {
-          return next(ApiError.badRequest("Заявка не найдена"));
-        }
+      // Конфигурация уведомлений
+      const notifications = {
+        accepted: {
+          title: "🎉 Заявка принята",
+          message: "Теперь вы можете связаться с клиентом.",
+        },
+        in_progress: {
+          title: "🔥 Заявка в работе",
+          message: "Работа началась. Можете продолжить выполнение.",
+        },
+        completed: {
+          title: "✅ Работа завершена",
+          message: "Работа успешно выполнена.",
+        },
+        review: {
+          title: "🔍 Работа на проверке",
+          message: "Заявка отправлена на проверку.",
+        },
+        rejected: {
+          title: "❌ Заявка отклонена",
+          message: "К сожалению, работа была отклонена.",
+        },
+      };
 
+      // ADMIN логика
+      if (user.role === "ADMIN") {
         if (status === "in_progress") {
           if (!comment || !comment.trim()) {
             return next(
               ApiError.badRequest(
-                "Необходимо указать причину возврата на доработку",
+                "Укажите комментарий, чтобы вернуть заявку на доработку",
               ),
             );
           }
-          await sendPush(
-            tokens.map((t) => t.token),
-            `🔥 Заявка в работе`,
-            "Можете начать или продолжить работу",
-            {
-              screen: `/(tabs)/applications`,
-            },
-          );
+
           application.returnComment = comment;
         }
-
-        if (status == "rejected") {
-          await sendPush(
-            tokens.map((t) => t.token),
-            `Заявка отклонена`,
-            "Ваша работа отклонена",
-            {
-              screen: `/(tabs)/applications`,
-            },
-          );
+      } else {
+        // Проверка что заявка принадлежит пользователю
+        if (application.userId !== user.id) {
+          return next(ApiError.forbidden("Нет доступа к этой заявке"));
         }
-        application.status = status;
-        await application.save();
-
-        return res.json(application);
       }
 
-      const application = await Application.findOne({
-        where: { userId: user.id, id },
-      });
+      // Отправка push
+      const notification = notifications[status];
 
-      if (status == "accepted") {
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🎉 Заявка принята`,
-          "Теперь вы можете связаться с клиентом",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
-      }
-      if (status == "in_progress") {
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🔥 Заявка в работе`,
-          "Можете начать или продолжить работу",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
-      }
-      if (status == "completed") {
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🎉 Заявка завершена`,
-          "Ваша работу приняли",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
+      if (notification && pushTokens.length) {
+        await sendPush(pushTokens, notification.title, notification.message, {
+          screen: "/(tabs)/applications",
+        });
       }
 
-      if (status == "review") {
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🎉 Заявка на рассмотрении`,
-          "Ваша работа на рассмотрении",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
-      }
-
-      if (status == "rejected") {
-        await sendPush(
-          tokens.map((t) => t.token),
-          `Заявка отклонена`,
-          "Ваша работа отклонена",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
-      }
       application.status = status;
       await application.save();
+
       return res.json(application);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
@@ -423,7 +388,8 @@ class ApplicationController {
   async completeApplication(req, res, next) {
     try {
       const { id } = req.params; // applicationId
-      const { brand, stateNumber, sendType } = req.body;
+      const { brand, stateNumber, completionComment, actSigned, sendType } =
+        req.body;
 
       if (!brand || !stateNumber) {
         return next(ApiError.badRequest("Не указаны марка или госномер"));
@@ -556,6 +522,11 @@ class ApplicationController {
         );
       }
 
+      await Application.update(
+        { completionComment, actSigned },
+        { where: { id: completion.applicationId } },
+      );
+
       return res.json({ success: true, completionId: completion.id });
     } catch (err) {
       console.error(err);
@@ -565,7 +536,8 @@ class ApplicationController {
   async updateCompleteApplication(req, res, next) {
     try {
       const { completionId } = req.params;
-      const { brand, stateNumber, sendType } = req.body;
+      const { brand, stateNumber, completionComment, actSigned, sendType } =
+        req.body;
 
       if (!brand || !stateNumber) {
         return next(ApiError.badRequest("Не указаны марка или госномер"));
@@ -722,7 +694,11 @@ class ApplicationController {
         attributes: ["token"],
       });
 
-      // Если sendType == "default" – меняем статус заявки
+      await Application.update(
+        { completionComment, actSigned },
+        { where: { id: completion.applicationId } },
+      );
+
       if (sendType === "default") {
         await Application.update(
           { status: "review" },
