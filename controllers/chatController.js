@@ -1,6 +1,13 @@
 const { Op } = require("sequelize");
 const ApiError = require("../error/ApiError");
-const { Chat, Message, Application, User } = require("../models/model");
+const {
+  Chat,
+  Message,
+  Application,
+  User,
+  PushToken,
+} = require("../models/model");
+const { sendPush } = require("../services/push.service");
 
 class ChatController {
   async getByApplication(req, res, next) {
@@ -245,12 +252,12 @@ class ChatController {
 
       const chats = await Chat.findAll({
         where: {
-          archived: false, // Добавлено условие для неархивных чатов
+          archived: false,
         },
         include: [
           {
             model: Application,
-            attributes: ["id", "userId"],
+            attributes: ["id", "userId", "clientBio", "clientPhone"],
             required: true,
             include: [
               {
@@ -317,6 +324,13 @@ class ChatController {
         where: { applicationId },
       });
 
+      const application = await Application.findByPk(applicationId);
+
+      const tokens = await PushToken.findAll({
+        where: { userId: application.userId },
+        attributes: ["token"],
+      });
+
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
@@ -330,9 +344,9 @@ class ChatController {
         });
 
         // Отправляем событие разархивации
-        const io = req.app.get('io');
+        const io = req.app.get("io");
         if (io) {
-          io.emit('chat_unarchived', {
+          io.emit("chat_unarchived", {
             chatId: chat.id,
             applicationId: chat.applicationId,
             unarchivedBy: user.id,
@@ -358,20 +372,29 @@ class ChatController {
       await chat.update({ updatedAt: new Date() });
 
       // ✅ Отправляем сообщение через Socket.io
-      const io = req.app.get('io');
+      const io = req.app.get("io");
       if (io) {
-        io.to(`chat_${applicationId}`).emit('new_message', {
+        io.to(`chat_${applicationId}`).emit("new_message", {
           ...fullMessage.toJSON(),
-          user: fullMessage.user
+          user: fullMessage.user,
         });
-        
+
         // Также отправляем обновление списка чатов
-        io.emit('chat_updated', { 
-          chatId: chat.id, 
+        io.emit("chat_updated", {
+          chatId: chat.id,
           applicationId,
-          lastMessage: fullMessage 
+          lastMessage: fullMessage,
         });
       }
+
+      await sendPush(
+        tokens.map((t) => t.token),
+        "Новая сообщение",
+        text,
+        {
+          screen: `/(tabs)/applications`,
+        },
+      );
 
       return res.json(fullMessage);
     } catch (err) {

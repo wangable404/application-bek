@@ -5,7 +5,6 @@ const {
   Application,
   User,
   ApplicationCompletion,
-  ApplicationPhoto,
   Chat,
   Message,
   PushToken,
@@ -148,8 +147,8 @@ class ApplicationController {
             {
               model: ApplicationCompletion,
               include: [
-                { model: ApplicationCompletionEquipment },
-                { model: ApplicationCompletionPhoto },
+                { model: ApplicationCompletionEquipment, as: "equipments" },
+                { model: ApplicationCompletionPhoto, as: "photos" },
               ],
             },
           ],
@@ -274,17 +273,17 @@ class ApplicationController {
       const user = req.user;
       const { comment } = req.body;
 
+      const tokens = await PushToken.findAll({
+        where: { userId: user.id },
+        attributes: ["token"],
+      });
+
       if (user.role == "ADMIN") {
         const application = await Application.findOne({ where: { id } });
 
         if (!application) {
           return next(ApiError.badRequest("Заявка не найдена"));
         }
-
-        const tokens = await PushToken.findAll({
-          where: { userId: user.id },
-          attributes: ["token"],
-        });
 
         if (status === "in_progress") {
           if (!comment || !comment.trim()) {
@@ -299,21 +298,65 @@ class ApplicationController {
         application.status = status;
         await application.save();
 
-        await sendPush(
-          tokens.map((t) => t.token),
-          "Заявка отклонена",
-          "Заявка отклонена со стороны диспетчеров",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
-
         return res.json(application);
       }
 
       const application = await Application.findOne({
         where: { userId: user.id, id },
       });
+
+      if (status == "accepted") {
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка принята`,
+          "Теперь вы можете связаться с клиентом",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
+      if (status == "in_progress") {
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🔥 Заявка в работе`,
+          "Можете начать или продолжить работу",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
+      if (status == "completed") {
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка завершена`,
+          "Ваша работу приняли",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
+
+      if (status == "review") {
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка на рассмотрении`,
+          "Ваша работа на рассмотрении",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
+
+      if (status == "rejected") {
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка отклонена`,
+          "Ваша работа отклонена",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
       application.status = status;
       await application.save();
       return res.json(application);
@@ -447,7 +490,7 @@ class ApplicationController {
         await ApplicationCompletionEquipment.create({
           equipment: eq.equipment,
           imei: eq.imei || null,
-          imeiPhoto: `/uploads/${eq.imeiPhoto}` || null,
+          imeiPhoto: eq.imeiPhoto ? `/uploads/${eq.imeiPhoto}` : null,
           completionId: completion.id,
         });
       }
@@ -460,8 +503,23 @@ class ApplicationController {
         });
       }
 
+      const userId = req.user.id;
+
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
+
       if (sendType == "default") {
         await Application.update({ status: "review" }, { where: { id } });
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка на рассмотрении`,
+          "Ваша работа на рассмотрении",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
       }
 
       return res.json({ success: true, completionId: completion.id });
@@ -623,12 +681,27 @@ class ApplicationController {
         }
         await eq.destroy();
       }
+      const userId = req.user.id;
+
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
 
       // Если sendType == "default" – меняем статус заявки
       if (sendType === "default") {
         await Application.update(
           { status: "review" },
           { where: { id: completion.applicationId } },
+        );
+
+        await sendPush(
+          tokens.map((t) => t.token),
+          `🎉 Заявка на рассмотрении`,
+          "Ваша работа на рассмотрении",
+          {
+            screen: `/(tabs)/applications`,
+          },
         );
       }
 

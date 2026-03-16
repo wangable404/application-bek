@@ -1,4 +1,4 @@
-const { User, PushToken } = require("../models/model");
+const { User, PushToken, Application } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
@@ -19,7 +19,7 @@ class UserController {
         return next(ApiError.badRequest("Нет доступа"));
       }
 
-      const { firstName, lastName, email, password, role } = req.body;
+      const { firstName, lastName, phone, city, email, password, role } = req.body;
 
       const hashPassword = await bcrypt.hash(password, 10);
 
@@ -27,6 +27,8 @@ class UserController {
         firstName,
         lastName,
         email,
+        phone,
+        city,
         password: hashPassword,
         role,
         isVerified: true,
@@ -199,6 +201,8 @@ class UserController {
         user.firstName,
         user.lastName,
         user.email,
+        user.city,
+        user.phone,
         user.role,
       );
       return res.json({
@@ -208,6 +212,8 @@ class UserController {
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
+          city: user.city,
+          phone: user.phone,
           role: user.role,
         },
       });
@@ -249,7 +255,9 @@ class UserController {
       if (user.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
-      const users = await User.findAll();
+      const users = await User.findAll({
+        include: [{ model: Application, as: "applications" }],
+      });
       return res.json(users);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
@@ -259,7 +267,7 @@ class UserController {
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { firstName, lastName, email, password, role } = req.body;
+      const { firstName, lastName, email, phone, city, password, role } = req.body;
       const authUser = req.user;
 
       if (authUser.role !== "ADMIN") {
@@ -275,6 +283,8 @@ class UserController {
       if (lastName !== undefined) user.lastName = lastName;
       if (email !== undefined) user.email = email;
       if (role !== undefined) user.role = role;
+      if (phone !== undefined) user.phone = phone;
+      if (city !== undefined) user.city = city;
 
       if (password !== undefined) {
         // если используешь хеширование

@@ -13,6 +13,12 @@ const User = sequelize.define("users", {
   lastName: {
     type: DataTypes.STRING,
   },
+  phone: {
+    type: DataTypes.STRING,
+  },
+  city: {
+    type: DataTypes.STRING,
+  },
   email: {
     type: DataTypes.STRING,
     unique: true,
