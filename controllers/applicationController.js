@@ -332,11 +332,19 @@ class ApplicationController {
         return next(ApiError.badRequest("Заявка не найдена"));
       }
 
-      // Получаем push токены
-      const tokens = await PushToken.findAll({
-        where: { userId: user.id },
-        attributes: ["token"],
-      });
+      let tokens;
+
+      if(user.role == 'ADMIN'){
+        tokens = await PushToken.findAll({
+          where: { userId: application.id },
+          attributes: ["token"],
+        });
+      }else{
+        tokens = await PushToken.findAll({
+          where: { userId: user.userId },
+          attributes: ["token"],
+        });
+      }
 
       const pushTokens = tokens.map((t) => t.token);
 
