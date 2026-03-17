@@ -332,23 +332,12 @@ class ApplicationController {
         return next(ApiError.badRequest("Заявка не найдена"));
       }
 
-      let tokens;
-
-      if(user.role == 'ADMIN'){
-        tokens = await PushToken.findAll({
-          where: { userId: application.id },
-          attributes: ["token"],
-        });
-      }else{
-        tokens = await PushToken.findAll({
-          where: { userId: user.userId },
-          attributes: ["token"],
-        });
-      }
-
+      const tokens = await PushToken.findAll({
+        where: { userId: application.userId },
+        attributes: ["token"],
+      });
       const pushTokens = tokens.map((t) => t.token);
 
-      // Конфигурация уведомлений
       const notifications = {
         accepted: {
           title: "🎉 Заявка принята",
