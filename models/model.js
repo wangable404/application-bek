@@ -141,7 +141,7 @@ const Application = sequelize.define("applications", {
   },
   workType: {
     type: DataTypes.ENUM(
-      "service", // Сервисные работы
+      "service", //  Сервисные работы
       "transition", // Переход
       "installation", // Установка
     ),

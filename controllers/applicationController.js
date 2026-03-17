@@ -13,6 +13,44 @@ const {
 } = require("../models/model");
 const sequelize = require("../db");
 const { sendPush } = require("../services/push.service");
+const imagekit = require("../config/imagekit");
+
+async function uploadToImageKit(file, folder = "uploads") {
+  try {
+    // Генерируем уникальное имя файла
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
+
+    // Загружаем файл в ImageKit
+    const result = await imagekit.upload({
+      file: file.data, // buffer данных файла
+      fileName: fileName,
+      folder: `/${folder}`,
+      useUniqueFileName: false, // мы уже сгенерировали уникальное имя
+    });
+
+    return {
+      fileId: result.fileId,
+      url: result.url,
+      filePath: result.filePath,
+      fileName: fileName,
+    };
+  } catch (error) {
+    console.error("Ошибка загрузки в ImageKit:", error);
+    throw error;
+  }
+}
+
+// Вспомогательная функция для удаления из ImageKit
+async function deleteFromImageKit(fileId) {
+  try {
+    if (fileId) {
+      await imagekit.deleteFile(fileId);
+    }
+  } catch (error) {
+    console.error("Ошибка удаления из ImageKit:", error);
+    // Не выбрасываем ошибку, чтобы не прерывать основной процесс
+  }
+}
 
 async function deleteFileIfExists(filePath) {
   if (!filePath) return;
@@ -410,8 +448,8 @@ class ApplicationController {
         }
       });
 
-      // --- Подготовка к перемещению файлов ---
-      const movePromises = [];
+      // --- Подготовка к загрузке в ImageKit ---
+      const uploadPromises = [];
 
       // Обработка файлов imeiPhoto
       if (req.files) {
@@ -422,16 +460,15 @@ class ApplicationController {
             const file = req.files[key]; // это один файл
             if (!equipmentMap[index]) equipmentMap[index] = {};
 
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
-            const uploadPath = `static/uploads/${fileName}`;
-
-            const movePromise = new Promise((resolve, reject) => {
-              file.mv(uploadPath, (err) => {
-                if (err) reject(err);
-                else resolve({ index, fileName });
-              });
-            });
-            movePromises.push(movePromise);
+            const uploadPromise = uploadToImageKit(file, "imei-photos").then(
+              (result) => ({
+                index,
+                fileId: result.fileId,
+                url: result.url,
+                filePath: result.filePath,
+              }),
+            );
+            uploadPromises.push(uploadPromise);
           }
         });
       }
@@ -448,27 +485,22 @@ class ApplicationController {
         return next(ApiError.badRequest("Не загружены фотографии автомобиля"));
       }
 
-      const photoMovePromises = photoFiles.map((file, idx) => {
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
-        const uploadPath = `static/uploads/${fileName}`;
-        return new Promise((resolve, reject) => {
-          file.mv(uploadPath, (err) => {
-            if (err) reject(err);
-            else resolve(fileName);
-          });
-        });
-      });
+      const photoUploadPromises = photoFiles.map((file) =>
+        uploadToImageKit(file, "car-photos"),
+      );
 
-      // Ждём перемещения всех файлов
-      const [imeiResults, photoFileNames] = await Promise.all([
-        Promise.all(movePromises),
-        Promise.all(photoMovePromises),
+      // Ждём загрузки всех файлов в ImageKit
+      const [imeiResults, photoResults] = await Promise.all([
+        Promise.all(uploadPromises),
+        Promise.all(photoUploadPromises),
       ]);
 
-      // Обновляем equipmentMap именами сохранённых imeiPhoto
-      imeiResults.forEach(({ index, fileName }) => {
+      // Обновляем equipmentMap данными из ImageKit
+      imeiResults.forEach(({ index, fileId, url, filePath }) => {
         if (equipmentMap[index]) {
-          equipmentMap[index].imeiPhoto = fileName;
+          equipmentMap[index].imeiPhoto = url;
+          equipmentMap[index].imeiPhotoFileId = fileId;
+          equipmentMap[index].imeiPhotoPath = filePath;
         }
       });
 
@@ -490,15 +522,18 @@ class ApplicationController {
         await ApplicationCompletionEquipment.create({
           equipment: eq.equipment,
           imei: eq.imei || null,
-          imeiPhoto: eq.imeiPhoto ? `/uploads/${eq.imeiPhoto}` : null,
+          imeiPhoto: eq.imeiPhoto || null,
+          imeiPhotoFileId: eq.imeiPhotoFileId || null,
           completionId: completion.id,
         });
       }
 
       // --- Сохранение фотографий автомобиля ---
-      for (const fileName of photoFileNames) {
+      for (const photo of photoResults) {
         await ApplicationCompletionPhoto.create({
-          path: `/uploads/${fileName}`,
+          path: photo.url,
+          fileId: photo.fileId,
+          filePath: photo.filePath,
           completionId: completion.id,
         });
       }
@@ -533,6 +568,7 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
+
   async updateCompleteApplication(req, res, next) {
     try {
       const { completionId } = req.params;
@@ -569,7 +605,10 @@ class ApplicationController {
         (p) => !existingPhotoIds.includes(p.id),
       );
       for (const photo of photosToDelete) {
-        await deleteFileIfExists(photo.path);
+        // Удаляем из ImageKit
+        if (photo.fileId) {
+          await deleteFromImageKit(photo.fileId);
+        }
         await photo.destroy();
       }
 
@@ -580,17 +619,13 @@ class ApplicationController {
           ? req.files.photos
           : [req.files.photos];
       }
+
       for (const file of photoFiles) {
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${file.name}`;
-        const uploadPath = `static/uploads/${fileName}`;
-        await new Promise((resolve, reject) => {
-          file.mv(uploadPath, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        const result = await uploadToImageKit(file, "car-photos");
         await ApplicationCompletionPhoto.create({
-          path: `/uploads/${fileName}`,
+          path: result.url,
+          fileId: result.fileId,
+          filePath: result.filePath,
           completionId: completion.id,
         });
       }
@@ -650,26 +685,27 @@ class ApplicationController {
 
         if (imeiPhotoFile) {
           // Пришёл новый файл – заменяем старый (если есть)
-          if (equipment.imeiPhoto) {
-            await deleteFileIfExists(equipment.imeiPhoto);
+          if (equipment.imeiPhotoFileId) {
+            await deleteFromImageKit(equipment.imeiPhotoFileId);
           }
-          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${imeiPhotoFile.name}`;
-          const uploadPath = `static/uploads/${fileName}`;
-          await new Promise((resolve, reject) => {
-            imeiPhotoFile.mv(uploadPath, (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
+
+          const result = await uploadToImageKit(imeiPhotoFile, "imei-photos");
+          await equipment.update({
+            imeiPhoto: result.url,
+            imeiPhotoFileId: result.fileId,
+            imeiPhotoPath: result.filePath,
           });
-          await equipment.update({ imeiPhoto: `/uploads/${fileName}` });
         } else if (imeiPhotoId) {
           // Передан id существующего фото – ничего не меняем
-          // Можно дополнительно проверить, что id совпадает с текущим, но это необязательно
         } else {
           // Ни файла, ни id – значит фото удалено
-          if (equipment.imeiPhoto) {
-            await deleteFileIfExists(equipment.imeiPhoto);
-            await equipment.update({ imeiPhoto: null });
+          if (equipment.imeiPhotoFileId) {
+            await deleteFromImageKit(equipment.imeiPhotoFileId);
+            await equipment.update({
+              imeiPhoto: null,
+              imeiPhotoFileId: null,
+              imeiPhotoPath: null,
+            });
           }
         }
       }
@@ -681,12 +717,14 @@ class ApplicationController {
       const equipmentToDelete = completion.equipments.filter(
         (eq) => !processedEquipmentIds.includes(eq.id),
       );
+
       for (const eq of equipmentToDelete) {
-        if (eq.imeiPhoto) {
-          await deleteFileIfExists(eq.imeiPhoto);
+        if (eq.imeiPhotoFileId) {
+          await deleteFromImageKit(eq.imeiPhotoFileId);
         }
         await eq.destroy();
       }
+
       const userId = req.user.id;
 
       const tokens = await PushToken.findAll({
@@ -721,6 +759,7 @@ class ApplicationController {
       return next(ApiError.badRequest(err.message));
     }
   }
+
   async deleteCompleteApplication(req, res, next) {
     try {
       const { completionId } = req.params;
@@ -730,22 +769,34 @@ class ApplicationController {
           { model: ApplicationCompletionPhoto, as: "photos" },
         ],
       });
+
       if (!completion) {
         return next(ApiError.notFound("Завершение не найдено"));
       }
 
-      // Удаление файлов фото
+      // Удаление файлов из ImageKit
+      const deletePromises = [];
+
+      // Удаление фото автомобиля
       for (const photo of completion.photos) {
-        await deleteFileIfExists(photo.path);
-      }
-      // Удаление файлов imeiPhoto
-      for (const eq of completion.equipments) {
-        if (eq.imeiPhoto) {
-          await deleteFileIfExists(eq.imeiPhoto);
+        if (photo.fileId) {
+          deletePromises.push(deleteFromImageKit(photo.fileId));
         }
       }
 
+      // Удаление imeiPhoto
+      for (const eq of completion.equipments) {
+        if (eq.imeiPhotoFileId) {
+          deletePromises.push(deleteFromImageKit(eq.imeiPhotoFileId));
+        }
+      }
+
+      // Ждем удаления всех файлов
+      await Promise.all(deletePromises);
+
+      // Удаляем запись из БД
       await completion.destroy();
+
       return res.json({ success: true });
     } catch (err) {
       console.error(err);
