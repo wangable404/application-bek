@@ -193,6 +193,7 @@ class UserController {
       if (!user.isVerified) {
         return next(ApiError.forbidden("Подтвердите почту"));
       }
+      
       const comparePassword = await bcrypt.compare(password, user.password);
       if (!comparePassword) {
         return next(ApiError.badRequest("Неверный пароль"));
@@ -271,7 +272,7 @@ class UserController {
       const { firstName, lastName, email, phone, city, password, role } =
         req.body;
       const authUser = req.user;
-
+      
       if (authUser.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
@@ -290,7 +291,7 @@ class UserController {
 
       if (password !== undefined) {
         // если используешь хеширование
-        const hashPassword = await bcrypt.hash(password, 5);
+        const hashPassword = await bcrypt.hash(password, 10);
         user.password = hashPassword;
       }
 
@@ -305,16 +306,18 @@ class UserController {
   async delete(req, res, next) {
     try {
       const { id } = req.params
-      const user = await User.findByPk(id);
-      if (!user) {
+      const deletedUser = await User.findByPk(id);
+      if (!deletedUser) {
         return next(ApiError.notFound("Пользователь не найден"));
       }
+
+      const user = req.user;
 
       if (user.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
 
-      await user.destroy();
+      await deletedUser.destroy();
       return res.json({ message: "Пользователь удален" });
     } catch (err) {
       return next(ApiError.badRequest(err.message));
