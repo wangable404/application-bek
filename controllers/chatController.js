@@ -387,14 +387,16 @@ class ChatController {
         });
       }
 
-      await sendPush(
-        tokens.map((t) => t.token),
-        "Новая сообщение",
-        text,
-        {
-          screen: `/(tabs)/applications`,
-        },
-      );
+      if (user.id !== application.userId) {
+        await sendPush(
+          tokens.map((t) => t.token),
+          "Новая сообщение",
+          text,
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
+      }
 
       return res.json(fullMessage);
     } catch (err) {
