@@ -134,7 +134,7 @@ const Application = sequelize.define("applications", {
     type: DataTypes.STRING,
   },
   agreedDate: {
-    type: DataTypes.DATEONLY,
+    type: DataTypes.STRING,
   },
   startWorkComment: {
     type: DataTypes.TEXT,
