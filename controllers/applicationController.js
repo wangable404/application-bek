@@ -357,6 +357,10 @@ class ApplicationController {
           title: "🔍 Работа на проверке",
           message: "Заявка отправлена на проверку.",
         },
+        approved: {
+          title: "✅ Заявка одобрена",
+          message: "Работа одобрена.",
+        },
         rejected: {
           title: "❌ Заявка отклонена",
           message: "К сожалению, работа была отклонена.",
