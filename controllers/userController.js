@@ -242,7 +242,7 @@ class UserController {
   async getAll(req, res, next) {
     try {
       const users = await User.findAll({
-        attributes: ["id", "firstName", "lastName", "email", "role"],
+        attributes: ["id", "firstName", "lastName", "email", "role", 'city'],
       });
       return res.json(users);
     } catch (err) {
