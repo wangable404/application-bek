@@ -190,6 +190,7 @@ class ApplicationController {
               ],
             },
           ],
+          order: [["createdAt", "DESC"]]
         });
         return res.json(applications);
       }
@@ -212,6 +213,7 @@ class ApplicationController {
             ],
           },
         ],
+        order: [["createdAt", "DESC"]]
       });
       return res.json(applications);
     } catch (err) {
