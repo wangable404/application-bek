@@ -83,11 +83,11 @@ class UserController {
           lastName,
           firstName,
           password: hashPassword,
-          emailCode: code,
-          emailCodeExpires: expires,
+          // emailCode: code,
+          // emailCodeExpires: expires,
         });
 
-        await sendVerificationMail(email, code);
+        // await sendVerificationMail(email, code);
 
         return res.json({
           message: "Код подтверждения повторно отправлен на почту",
@@ -99,12 +99,12 @@ class UserController {
         lastName,
         email,
         password: hashPassword,
-        emailCode: code,
-        emailCodeExpires: expires,
+        // emailCode: code,
+        // emailCodeExpires: expires,
         isVerified: false,
       });
 
-      await sendVerificationMail(email, code);
+      // await sendVerificationMail(email, code);
 
       return res.json({
         message: "Код подтверждения отправлен на почту",
