@@ -269,7 +269,7 @@ class UserController {
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { firstName, lastName, email, phone, city, password, role } =
+      const { firstName, lastName, email, phone, city, password, role, isVerified } =
         req.body;
       const authUser = req.user;
       
@@ -288,6 +288,7 @@ class UserController {
       if (role !== undefined) user.role = role;
       if (phone !== undefined) user.phone = phone;
       if (city !== undefined) user.city = city;
+      if (isVerified !== undefined) user.isVerified = isVerified;
 
       if (password !== undefined) {
         // если используешь хеширование
