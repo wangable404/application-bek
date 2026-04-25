@@ -110,7 +110,7 @@ const Application = sequelize.define("applications", {
     type: DataTypes.STRING,
   },
   comment: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
   },
   allCarQuantity: {
     type: DataTypes.STRING,
