@@ -861,8 +861,8 @@ class ApplicationController {
         "..",
         "static",
         "uploads",
-        "qrcodes",
         id.toString(),
+        "qrcode",
       );
       if (!fs.existsSync(qrUploadDir)) {
         fs.mkdirSync(qrUploadDir, { recursive: true });
@@ -876,7 +876,7 @@ class ApplicationController {
 
       // Относительный путь для сохранения в БД
       const relativePath = path
-        .join("uploads", "qrcodes", id.toString(), uniqueName)
+        .join("uploads", id.toString(), "qrcode", uniqueName)
         .replace(/\\/g, "/");
 
       // Обновляем запись в БД
