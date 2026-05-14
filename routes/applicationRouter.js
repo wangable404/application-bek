@@ -16,6 +16,7 @@ router.post(
 );
 router.post('/:id/start-work', authMiddleware, applicationController.startApplication)
 router.post("/:id/complete", authMiddleware, applicationController.completeApplication);
+router.post('/:id/upload-qr', authMiddleware, applicationController.uploadQrCode);
 router.put('/:completionId/complete', authMiddleware, applicationController.updateCompleteApplication);
 router.delete('/:completionId/complete', authMiddleware, applicationController.deleteCompleteApplication);
 

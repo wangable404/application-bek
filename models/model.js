@@ -164,6 +164,10 @@ const Application = sequelize.define("applications", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  qrCode: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   userId: {
     type: DataTypes.UUID,
     references: {

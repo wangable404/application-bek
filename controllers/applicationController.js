@@ -415,8 +415,14 @@ class ApplicationController {
   async completeApplication(req, res, next) {
     try {
       const { id } = req.params; // applicationId
-      const { brand, stateNumber, completionComment, additionalWork, actSigned, sendType } =
-        req.body;
+      const {
+        brand,
+        stateNumber,
+        completionComment,
+        additionalWork,
+        actSigned,
+        sendType,
+      } = req.body;
 
       if (!brand || !stateNumber) {
         return next(ApiError.badRequest("Не указаны марка или госномер"));
@@ -546,8 +552,14 @@ class ApplicationController {
   async updateCompleteApplication(req, res, next) {
     try {
       const { completionId } = req.params;
-      const { brand, stateNumber, completionComment, additionalWork, actSigned, sendType } =
-        req.body;
+      const {
+        brand,
+        stateNumber,
+        completionComment,
+        additionalWork,
+        actSigned,
+        sendType,
+      } = req.body;
 
       if (!brand || !stateNumber) {
         return next(ApiError.badRequest("Не указаны марка или госномер"));
@@ -778,6 +790,104 @@ class ApplicationController {
       await completion.destroy();
 
       return res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+  async uploadQrCode(req, res, next) {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      // Проверяем права доступа (только ADMIN или владелец заявки)
+      const application = await Application.findOne({ where: { id } });
+
+      if (!application) {
+        return next(ApiError.notFound("Заявка не найдена"));
+      }
+
+      // Проверка прав: только ADMIN или пользователь, создавший заявку
+      if (user.role !== "ADMIN" && application.userId !== user.id) {
+        return next(ApiError.forbidden("Нет доступа к этой заявке"));
+      }
+
+      // Проверяем наличие файла
+      if (!req.files || !req.files.qrCode) {
+        return next(ApiError.badRequest("Файл QR-кода не загружен"));
+      }
+
+      const qrFile = req.files.qrCode;
+
+      // Проверка типа файла
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "image/webp",
+      ];
+      if (!allowedTypes.includes(qrFile.mimetype)) {
+        return next(
+          ApiError.badRequest(
+            "Неверный формат файла. Поддерживаются: JPEG, PNG, WEBP",
+          ),
+        );
+      }
+
+      // Проверка размера (максимум 5MB)
+      const maxSize = 5 * 1024 * 1024;
+      if (qrFile.size > maxSize) {
+        return next(
+          ApiError.badRequest("Размер файла не должен превышать 5MB"),
+        );
+      }
+
+      // Удаляем старый QR-код, если есть
+      if (application.qrCode) {
+        const oldQrPath = path.resolve(
+          __dirname,
+          "..",
+          "static",
+          application.qrCode,
+        );
+        if (fs.existsSync(oldQrPath)) {
+          fs.unlinkSync(oldQrPath);
+        }
+      }
+
+      // Создаем директорию для QR-кодов
+      const qrUploadDir = path.resolve(
+        __dirname,
+        "..",
+        "static",
+        "uploads",
+        "qrcodes",
+        id.toString(),
+      );
+      if (!fs.existsSync(qrUploadDir)) {
+        fs.mkdirSync(qrUploadDir, { recursive: true });
+      }
+
+      // Сохраняем файл
+      const ext = path.extname(qrFile.name);
+      const uniqueName = `qr_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
+      const filePath = path.join(qrUploadDir, uniqueName);
+      await qrFile.mv(filePath);
+
+      // Относительный путь для сохранения в БД
+      const relativePath = path
+        .join("uploads", "qrcodes", id.toString(), uniqueName)
+        .replace(/\\/g, "/");
+
+      // Обновляем запись в БД
+      application.qrCode = relativePath;
+      await application.save();
+
+      return res.json({
+        success: true,
+        message: "QR-код успешно загружен",
+        qrCode: relativePath,
+      });
     } catch (err) {
       console.error(err);
       return next(ApiError.badRequest(err.message));
