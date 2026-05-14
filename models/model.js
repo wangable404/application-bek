@@ -156,6 +156,10 @@ const Application = sequelize.define("applications", {
     type: DataTypes.TEXT,
     comment: "Комментарий при завершении работы",
   },
+  additionalWork: {
+    type: DataTypes.TEXT,
+    comment: "Дополнительные работы",
+  },
   actSigned: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
