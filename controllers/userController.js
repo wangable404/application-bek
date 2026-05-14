@@ -2,7 +2,6 @@ const { User, PushToken, Application } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-const { sendVerificationMail } = require("../services/mailService");
 const uuid = require("uuid");
 
 const generateJwt = (id, firstName, lastName, email, city, phone, role) => {
@@ -134,7 +133,7 @@ class UserController {
       user.emailCodeExpires = expires;
       await user.save();
 
-      await sendVerificationMail(email, code);
+      // await sendVerificationMail(email, code);
 
       return res.json({
         message: "Код подтверждения отправлен на почту",
