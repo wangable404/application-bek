@@ -415,7 +415,7 @@ class ApplicationController {
   async completeApplication(req, res, next) {
     try {
       const { id } = req.params; // applicationId
-      const { brand, stateNumber, completionComment, actSigned, sendType } =
+      const { brand, stateNumber, completionComment, additionalWork, actSigned, sendType } =
         req.body;
 
       if (!brand || !stateNumber) {
@@ -532,7 +532,7 @@ class ApplicationController {
       }
 
       await Application.update(
-        { completionComment, actSigned },
+        { completionComment, additionalWork, actSigned },
         { where: { id: completion.applicationId } },
       );
 
@@ -546,7 +546,7 @@ class ApplicationController {
   async updateCompleteApplication(req, res, next) {
     try {
       const { completionId } = req.params;
-      const { brand, stateNumber, completionComment, actSigned, sendType } =
+      const { brand, stateNumber, completionComment, additionalWork, actSigned, sendType } =
         req.body;
 
       if (!brand || !stateNumber) {
@@ -722,7 +722,7 @@ class ApplicationController {
       });
 
       await Application.update(
-        { completionComment, actSigned },
+        { completionComment, additionalWork, actSigned },
         { where: { id: completion.applicationId } },
       );
 
