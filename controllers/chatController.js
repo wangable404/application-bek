@@ -257,11 +257,23 @@ class ChatController {
         include: [
           {
             model: Application,
-            attributes: ["id", "userId", "clientBio", "clientPhone"],
+            attributes: [
+              "id",
+              "userId",
+              "companyId",
+              "clientBio",
+              "clientPhone",
+            ],
             required: true,
             include: [
               {
                 model: User,
+                as: "integrator", // ✅ интегратор которому назначена заявка
+                attributes: ["id", "firstName", "lastName", "role"],
+              },
+              {
+                model: User,
+                as: "company", // ✅ компания которая создала заявку
                 attributes: ["id", "firstName", "lastName", "role"],
               },
             ],
@@ -284,8 +296,10 @@ class ChatController {
 
       const filteredChats =
         user.role === "USER"
-          ? chats.filter((chat) => chat.application.userId === user.id)
-          : chats;
+          ? chats.filter((chat) => chat.application.userId === userId)
+          : user.role === "COMPANY"
+            ? chats.filter((chat) => chat.application.companyId === userId)
+            : chats;
 
       const chatsWithUnread = await Promise.all(
         filteredChats.map(async (chat) => {

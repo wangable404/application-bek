@@ -176,6 +176,14 @@ const Application = sequelize.define("applications", {
     },
     allowNull: false,
   },
+  companyId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: true,
+  },
 });
 
 const ApplicationCompletion = sequelize.define("application_completions", {
@@ -322,11 +330,51 @@ const Message = sequelize.define(
   { timestamps: true },
 );
 
+const Invitation = sequelize.define("invitations", {
+  id: {
+    type: DataTypes.UUID,
+    primaryKey: true,
+    defaultValue: DataTypes.UUIDV4,
+  },
+  approved: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  userId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+  },
+  companyId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+  },
+});
+
 User.hasMany(PushToken, { foreignKey: "userId" });
 PushToken.belongsTo(User, { foreignKey: "userId" });
 
-User.hasMany(Application, { foreignKey: "userId" });
-Application.belongsTo(User, { foreignKey: "userId" });
+User.hasMany(Application, { foreignKey: "userId", as: "assignedApplications" });
+Application.belongsTo(User, { foreignKey: "userId", as: "integrator" });
+
+User.hasMany(Invitation, { foreignKey: "userId", as: "userInvitations" });
+Invitation.belongsTo(User, { foreignKey: "userId", as: "integrator" });
+
+User.hasMany(Invitation, { foreignKey: "companyId", as: "companyInvitations" });
+Invitation.belongsTo(User, { foreignKey: "companyId", as: "company" });
+
+User.hasMany(Application, {
+  foreignKey: "companyId",
+  as: "companyApplications",
+});
+Application.belongsTo(User, { foreignKey: "companyId", as: "company" });
 
 Application.hasMany(ApplicationCompletion, {
   foreignKey: "applicationId",
@@ -372,4 +420,5 @@ module.exports = {
   ApplicationCompletionPhoto,
   Chat,
   Message,
+  Invitation,
 };

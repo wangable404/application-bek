@@ -14,6 +14,7 @@ const {
 const sequelize = require("../db");
 const { sendPush } = require("../services/push.service");
 const imagekit = require("../config/imagekit");
+const { log } = require("console");
 
 const removeDir = (dirPath) => {
   if (fs.existsSync(dirPath)) {
@@ -72,6 +73,7 @@ class ApplicationController {
         relay,
         workType,
         userId,
+        companyId,
       } = req.body;
 
       const application = await Application.findOne({
@@ -106,18 +108,19 @@ class ApplicationController {
           application.freightBrand = freightBrand;
           application.relay = relay;
           application.workType = workType;
+          application.companyId = companyId;
 
           await application.save();
         }
 
-        await sendPush(
-          tokens.map((t) => t.token),
-          "Новая заявка",
-          "У вас появилась новая заявка на работу",
-          {
-            screen: `/(tabs)/applications`,
-          },
-        );
+        // await sendPush(
+        //   tokens.map((t) => t.token),
+        //   "Новая заявка",
+        //   "У вас появилась новая заявка на работу",
+        //   {
+        //     screen: `/(tabs)/applications`,
+        //   },
+        // );
 
         return res.json(application);
       }
@@ -141,18 +144,19 @@ class ApplicationController {
         relay,
         workType,
         userId,
+        companyId,
       });
 
       await Chat.create({ applicationId: newApplication.id });
 
-      await sendPush(
-        tokens.map((t) => t.token),
-        "Новая заявка",
-        "У вас появилась новая заявка на работу",
-        {
-          screen: `/(tabs)/applications`,
-        },
-      );
+      // await sendPush(
+      //   tokens.map((t) => t.token),
+      //   "Новая заявка",
+      //   "У вас появилась новая заявка на работу",
+      //   {
+      //     screen: `/(tabs)/applications`,
+      //   },
+      // );
 
       return res.json(newApplication);
     } catch (err) {
@@ -164,18 +168,30 @@ class ApplicationController {
     try {
       const user = req.user;
 
-      if (user.role == "ADMIN") {
+      const completionInclude = {
+        model: ApplicationCompletion,
+        include: [
+          { model: ApplicationCompletionEquipment, as: "equipments" },
+          { model: ApplicationCompletionPhoto, as: "photos" },
+        ],
+      };
+
+      if (user.role === "ADMIN") {
         const applications = await Application.findAll({
           include: [
-            { model: User },
-            {
-              model: ApplicationCompletion,
-              include: [
-                { model: ApplicationCompletionEquipment, as: "equipments" },
-                { model: ApplicationCompletionPhoto, as: "photos" },
-              ],
-            },
+            { model: User, as: "integrator" },
+            { model: User, as: "company" },
+            completionInclude,
           ],
+          order: [["createdAt", "DESC"]],
+        });
+        return res.json(applications);
+      }
+
+      if (user.role === "COMPANY") {
+        const applications = await Application.findAll({
+          where: { companyId: user.id },
+          include: [{ model: User, as: "integrator" }, completionInclude],
           order: [["createdAt", "DESC"]],
         });
         return res.json(applications);
@@ -184,20 +200,12 @@ class ApplicationController {
       const applications = await Application.findAll({
         where: { userId: user.id },
         include: [
+          { model: User, as: "company" },
           {
             model: Chat,
             include: [{ model: Message, order: [["createdAt", "DESC"]] }],
           },
-          {
-            model: ApplicationCompletion,
-            include: [
-              {
-                model: ApplicationCompletionEquipment,
-                as: "equipments",
-              },
-              { model: ApplicationCompletionPhoto, as: "photos" },
-            ],
-          },
+          completionInclude,
         ],
         order: [["createdAt", "DESC"]],
       });
@@ -214,6 +222,7 @@ class ApplicationController {
         include: [
           {
             model: User,
+            as: "integrator",
             attributes: ["id", "firstName", "lastName", "email", "role"],
           },
           {

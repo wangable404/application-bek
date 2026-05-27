@@ -1,8 +1,9 @@
-const { User, PushToken, Application } = require("../models/model");
+const { User, PushToken, Application, Invitation } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const uuid = require("uuid");
+const { sendPush } = require("../services/push.service");
 
 const generateJwt = (id, firstName, lastName, email, city, phone, role) => {
   const payload = { id, firstName, lastName, email, city, phone, role };
@@ -185,14 +186,18 @@ class UserController {
         return next(ApiError.badRequest("Пользователь не найден"));
       }
 
-      if (isAdmin && user.role !== "ADMIN") {
+      if (isAdmin && user.role === "USER") {
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+
+      if (!isAdmin && user.role !== "USER") {
         return next(ApiError.forbidden("Нет доступа"));
       }
 
       if (!user.isVerified) {
         return next(ApiError.forbidden("Подтвердите почту"));
       }
-      
+
       const comparePassword = await bcrypt.compare(password, user.password);
       if (!comparePassword) {
         return next(ApiError.badRequest("Неверный пароль"));
@@ -241,7 +246,8 @@ class UserController {
   async getAll(req, res, next) {
     try {
       const users = await User.findAll({
-        attributes: ["id", "firstName", "lastName", "email", "role", 'city'],
+        attributes: ["id", "firstName", "lastName", "email", "role", "city"],
+        where: { role: "USER" },
       });
       return res.json(users);
     } catch (err) {
@@ -253,13 +259,41 @@ class UserController {
     try {
       const id = req.user.id;
       const user = await User.findByPk(id);
+
+      if (user.role !== "ADMIN" && user.role !== "COMPANY") {
+        return next(ApiError.forbidden("Нет доступа"));
+      }
+
+      if (user.role === "ADMIN") {
+        const users = await User.findAll({
+          where: { role: "USER" },
+          include: [{ model: Application, as: "assignedApplications" }],
+        });
+        return res.json(users);
+      }
+
+      if (user.role === "COMPANY") {
+        const users = await User.findAll({
+          where: { role: "USER", isVerified: true },
+        });
+        return res.json(users);
+      }
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async getCompanys(req, res, next) {
+    try {
+      const user = req.user;
+
       if (user.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
-      const users = await User.findAll({
-        include: [{ model: Application, as: "applications" }],
-      });
-      return res.json(users);
+
+      const companys = await User.findAll({ where: { role: "COMPANY" } });
+
+      return res.json(companys);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
@@ -268,10 +302,18 @@ class UserController {
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { firstName, lastName, email, phone, city, password, role, isVerified } =
-        req.body;
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        city,
+        password,
+        role,
+        isVerified,
+      } = req.body;
       const authUser = req.user;
-      
+
       if (authUser.role !== "ADMIN") {
         return next(ApiError.forbidden("Нет доступа"));
       }
@@ -305,7 +347,7 @@ class UserController {
 
   async delete(req, res, next) {
     try {
-      const { id } = req.params
+      const { id } = req.params;
       const deletedUser = await User.findByPk(id);
       if (!deletedUser) {
         return next(ApiError.notFound("Пользователь не найден"));
@@ -319,6 +361,89 @@ class UserController {
 
       await deletedUser.destroy();
       return res.json({ message: "Пользователь удален" });
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async inviteCreate(req, res, next) {
+    try {
+      const { userId } = req.body;
+
+      const user = req.user;
+
+      if (user.role !== "COMPANY") {
+        return next(ApiError.forbidden("Только компания может приглашать"));
+      }
+
+      const integrator = await User.findByPk(userId);
+      if (!integrator) {
+        return next(ApiError.notFound("Пользователь не найден"));
+      }
+
+      if (integrator.role !== "USER") {
+        return next(
+          ApiError.badRequest("Можно приглашать только интеграторов"),
+        );
+      }
+
+      const existing = await Invitation.findOne({
+        where: { userId, companyId: user.id },
+      });
+      if (existing) {
+        return next(ApiError.badRequest("Пользователь уже приглашён"));
+      }
+
+      const tokens = await PushToken.findAll({
+        where: { userId },
+        attributes: ["token"],
+      });
+
+      // await sendPush(
+      //   tokens.map((t) => t.token),
+      //   `Приглашение от компании`,
+      //   `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
+      //   {
+      //     screen: `/(tabs)/companys`,
+      //   },
+      // );
+
+      const invitation = await Invitation.create({
+        userId,
+        companyId: user.id,
+      });
+
+      return res.json(invitation);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async getCompanies(req, res, next) {
+    try {
+      const userId = req.user.id;
+
+      const invitations = await Invitation.findAll({
+        where: { userId },
+        include: [{ model: User, as: "company" }],
+      });
+
+      return res.json(invitations);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async getIntegrators(req, res, next) {
+    try {
+      const companyId = req.user.id;
+
+      const invitations = await Invitation.findAll({
+        where: { companyId },
+        include: [{ model: User, as: "integrator" }],
+      });
+
+      return res.json(invitations);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }
