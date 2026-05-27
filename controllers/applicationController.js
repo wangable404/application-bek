@@ -113,14 +113,14 @@ class ApplicationController {
           await application.save();
         }
 
-        // await sendPush(
-        //   tokens.map((t) => t.token),
-        //   "Новая заявка",
-        //   "У вас появилась новая заявка на работу",
-        //   {
-        //     screen: `/(tabs)/applications`,
-        //   },
-        // );
+        await sendPush(
+          tokens.map((t) => t.token),
+          "Новая заявка",
+          "У вас появилась новая заявка на работу",
+          {
+            screen: `/(tabs)/applications`,
+          },
+        );
 
         return res.json(application);
       }
@@ -149,14 +149,14 @@ class ApplicationController {
 
       await Chat.create({ applicationId: newApplication.id });
 
-      // await sendPush(
-      //   tokens.map((t) => t.token),
-      //   "Новая заявка",
-      //   "У вас появилась новая заявка на работу",
-      //   {
-      //     screen: `/(tabs)/applications`,
-      //   },
-      // );
+      await sendPush(
+        tokens.map((t) => t.token),
+        "Новая заявка",
+        "У вас появилась новая заявка на работу",
+        {
+          screen: `/(tabs)/applications`,
+        },
+      );
 
       return res.json(newApplication);
     } catch (err) {

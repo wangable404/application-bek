@@ -399,14 +399,14 @@ class UserController {
         attributes: ["token"],
       });
 
-      // await sendPush(
-      //   tokens.map((t) => t.token),
-      //   `Приглашение от компании`,
-      //   `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
-      //   {
-      //     screen: `/(tabs)/companys`,
-      //   },
-      // );
+      await sendPush(
+        tokens.map((t) => t.token),
+        `Приглашение от компании`,
+        `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
+        {
+          screen: `/(tabs)/companys`,
+        },
+      );
 
       const invitation = await Invitation.create({
         userId,
