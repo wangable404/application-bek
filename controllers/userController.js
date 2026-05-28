@@ -324,7 +324,7 @@ class UserController {
       }
 
       if(user.role == "COMPANY" && role == "USER"){
-        return res.json("Нельзя сменить роль");
+        await Invitation.destroy({where: {companyId: id}});
       }
 
       if (firstName !== undefined) user.firstName = firstName;
