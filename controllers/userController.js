@@ -424,7 +424,7 @@ class UserController {
       const userId = req.user.id;
 
       const invitations = await Invitation.findAll({
-        where: { userId },
+        where: { userId, approved: true },
         include: [{ model: User, as: "company" }],
       });
 
