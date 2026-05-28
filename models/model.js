@@ -376,7 +376,7 @@ User.hasMany(Invitation, { foreignKey: "userId", as: "userInvitations" });
 Invitation.belongsTo(User, { foreignKey: "userId", as: "integrator" });
 
 User.hasMany(Invitation, { foreignKey: "companyId", as: "companyInvitations" });
-Invitation.belongsTo(User, { foreignKey: "companyId", as: "company" });
+Invitation.belongsTo(User, { foreignKey: "companyId", as: "info" });
 
 User.hasMany(Application, {
   foreignKey: "companyId",

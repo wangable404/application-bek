@@ -404,7 +404,7 @@ class UserController {
         `Приглашение от компании`,
         `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
         {
-          screen: `/(tabs)/companys`,
+          screen: `/(tabs)/companies`,
         },
       );
 
@@ -425,7 +425,22 @@ class UserController {
 
       const invitations = await Invitation.findAll({
         where: { userId, approved: true },
-        include: [{ model: User, as: "company" }],
+        include: [{ model: User, as: "info" }],
+      });
+
+      return res.json(invitations);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async getInvitations(req, res, next) {
+    try {
+      const userId = req.user.id;
+
+      const invitations = await Invitation.findAll({
+        where: { userId, approved: false },
+        include: [{ model: User, as: "info" }],
       });
 
       return res.json(invitations);
@@ -444,6 +459,45 @@ class UserController {
       });
 
       return res.json(invitations);
+    } catch (err) {
+      return next(ApiError.badRequest(err.message));
+    }
+  }
+
+  async updateInvitationStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { approved, rejected } = req.body;
+      const userId = req.user.id;
+
+      const invitation = await Invitation.findOne({
+        where: { id, userId },
+      });
+
+      if (!invitation) {
+        return next(ApiError.notFound("Приглашение не найдено"));
+      }
+
+      if (invitation.approved || invitation.rejected) {
+        return next(ApiError.badRequest("Это приглашение уже обработано"));
+      }
+
+      if (approved === true) {
+        invitation.approved = true;
+        invitation.rejected = false;
+      } else if (rejected === true) {
+        invitation.approved = false;
+        invitation.rejected = true;
+      } else {
+        return next(ApiError.badRequest("Неверный статус"));
+      }
+
+      await invitation.save();
+
+      return res.json({
+        message: approved ? "Приглашение принято" : "Приглашение отклонено",
+        invitation,
+      });
     } catch (err) {
       return next(ApiError.badRequest(err.message));
     }

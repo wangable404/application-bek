@@ -166,7 +166,9 @@ class ApplicationController {
   }
   async getAll(req, res, next) {
     try {
-      const { companyId } = req.body;
+       const { companyId, userId } = req.query;
+       console.log(companyId, 'sdasdsad');
+       
       const user = req.user;
 
       const completionInclude = {
@@ -199,7 +201,7 @@ class ApplicationController {
       }
 
       const applications = await Application.findAll({
-        where: { companyId },
+        where: { companyId, userId },
         include: [
           { model: User, as: "company" },
           {

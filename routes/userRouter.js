@@ -17,7 +17,9 @@ router.get('/', userController.getAll)
 router.delete('/:id', authMiddleware, userController.delete)
 
 router.post('/invite', authMiddleware, userController.inviteCreate)
+router.get('/invite', authMiddleware, userController.getInvitations)
 router.get('/invite/companies', authMiddleware, userController.getCompanies)
 router.get('/invite/integrators', authMiddleware, userController.getIntegrators)
+router.patch("/invite/:id", authMiddleware, userController.updateInvitationStatus)
 
 module.exports = router
