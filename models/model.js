@@ -344,6 +344,10 @@ const Invitation = sequelize.define("invitations", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  rejected: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   userId: {
     type: DataTypes.UUID,
     references: {
