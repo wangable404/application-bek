@@ -323,6 +323,10 @@ class UserController {
         return next(ApiError.notFound("Пользователь не найден"));
       }
 
+      if(user.role == "COMPANY" && role == "USER"){
+        return res.json("Нельзя сменить роль");
+      }
+
       if (firstName !== undefined) user.firstName = firstName;
       if (lastName !== undefined) user.lastName = lastName;
       if (email !== undefined) user.email = email;
