@@ -167,9 +167,11 @@ class ApplicationController {
   async getAll(req, res, next) {
     try {
        const { companyId, userId } = req.query;
-       console.log(companyId, 'sdasdsad');
-       
       const user = req.user;
+      
+      console.log('come');
+      console.log(companyId, userId, 'zz');
+      
 
       const completionInclude = {
         model: ApplicationCompletion,
@@ -200,10 +202,16 @@ class ApplicationController {
         return res.json(applications);
       }
 
+      const where = { userId };
+
+      if (companyId) {
+        where.companyId = companyId;
+      }
+
       const applications = await Application.findAll({
-        where: { companyId, userId },
+        where,
         include: [
-          { model: User, as: "company" },
+          { model: User, as: "company" }, 
           {
             model: Chat,
             include: [{ model: Message, order: [["createdAt", "DESC"]] }],
@@ -214,6 +222,8 @@ class ApplicationController {
       });
       return res.json(applications);
     } catch (err) {
+      console.log('sdsfsdfdsfsdfds', err);
+      
       return next(ApiError.badRequest(err.message));
     }
   }
@@ -262,17 +272,19 @@ class ApplicationController {
   }
 
   async getOneAdmin(req, res, next) {
-    const { id } = req.params;
+    try{
+      const { id } = req.params;
     const user = req.user;
+    
 
-    if (user.role !== "ADMIN") {
+    if (user.role !== "ADMIN" && user.role !== "COMPANY") {
       return next(ApiError.forbidden("Нет доступа"));
     }
 
     const application = await Application.findOne({
       where: { id: id },
       include: [
-        { model: User },
+        { model: User, as: 'integrator' },
         {
           model: ApplicationCompletion,
           include: [
@@ -291,6 +303,9 @@ class ApplicationController {
     }
 
     return res.json(application);
+    }catch(err) {
+      return next(ApiError.badRequest(err.message))
+    }
   }
   async reject(req, res, next) {
     try {

@@ -15,7 +15,6 @@ const User = sequelize.define("users", {
   },
   description: {
     type: DataTypes.STRING,
-    allowNull: false,
   },
   phone: {
     type: DataTypes.STRING,
@@ -34,6 +33,18 @@ const User = sequelize.define("users", {
     type: DataTypes.STRING,
     defaultValue: "USER",
   },
+  balance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  isBlocked: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  trialEndsAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
   isVerified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
@@ -45,6 +56,14 @@ const User = sequelize.define("users", {
   emailCodeExpires: {
     type: DataTypes.DATE,
     allowNull: true,
+  },
+  planId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: "plans",
+      key: "id",
+    },
   },
 });
 
@@ -65,6 +84,59 @@ const PushToken = sequelize.define("push_tokens", {
       key: "id",
     },
     allowNull: false,
+  },
+});
+
+const Plan = sequelize.define("plans", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  pricePerMonth: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  pricePerDay: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  maxIntegrators: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+  },
+});
+
+const Payment = sequelize.define("payments", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  userId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+  },
+  amount: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  paymentRef: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+  },
+  source: {
+    type: DataTypes.STRING,
+    defaultValue: "manual",
   },
 });
 
@@ -346,7 +418,7 @@ const Invitation = sequelize.define("invitations", {
   },
   rejected: {
     type: DataTypes.BOOLEAN,
-    defaultValue: false
+    defaultValue: false,
   },
   userId: {
     type: DataTypes.UUID,
@@ -368,6 +440,12 @@ const Invitation = sequelize.define("invitations", {
 
 User.hasMany(PushToken, { foreignKey: "userId" });
 PushToken.belongsTo(User, { foreignKey: "userId" });
+
+User.belongsTo(Plan, { foreignKey: "planId" });
+Plan.hasMany(User, { foreignKey: "planId" });
+
+User.hasMany(Payment, { foreignKey: "userId" });
+Payment.belongsTo(User, { foreignKey: "userId" });
 
 User.hasMany(Application, { foreignKey: "userId", as: "assignedApplications" });
 Application.belongsTo(User, { foreignKey: "userId", as: "integrator" });
@@ -422,6 +500,8 @@ Message.belongsTo(User, { foreignKey: "senderId" });
 module.exports = {
   User,
   PushToken,
+  Payment,
+  Plan,
   Application,
   ApplicationCompletion,
   ApplicationCompletionEquipment,

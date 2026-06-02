@@ -1,12 +1,18 @@
-const { User, PushToken, Application, Invitation } = require("../models/model");
+const {
+  User,
+  PushToken,
+  Application,
+  Invitation,
+  Plan,
+} = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const uuid = require("uuid");
 const { sendPush } = require("../services/push.service");
 
-const generateJwt = (id, firstName, lastName, email, city, phone, role) => {
-  const payload = { id, firstName, lastName, email, city, phone, role };
+const generateJwt = (id, firstName, lastName, email, city, phone, balance, role) => {
+  const payload = { id, firstName, lastName, email, city, phone, balance, role };
   return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
 };
 
@@ -61,9 +67,10 @@ class UserController {
   }
   async registration(req, res, next) {
     try {
-      const { firstName, lastName, email, password } = req.body;
+      const { firstName, lastName, email, description, password, role } =
+        req.body;
 
-      if (!firstName || !lastName || !email || !password) {
+      if (!firstName || !lastName || !email || !description || !password) {
         return next(ApiError.badRequest("Заполните все необходимые поля"));
       }
 
@@ -83,6 +90,8 @@ class UserController {
           lastName,
           firstName,
           password: hashPassword,
+          description,
+          role,
           // emailCode: code,
           // emailCodeExpires: expires,
         });
@@ -98,6 +107,8 @@ class UserController {
         firstName,
         lastName,
         email,
+        description,
+        role,
         password: hashPassword,
         // emailCode: code,
         // emailCodeExpires: expires,
@@ -194,6 +205,10 @@ class UserController {
         return next(ApiError.forbidden("Нет доступа"));
       }
 
+      if (user.isBlocked) {
+        return next(ApiError.forbidden("Пользователь заблокирован"));
+      }
+
       if (!user.isVerified) {
         return next(ApiError.forbidden("Подтвердите почту"));
       }
@@ -209,6 +224,7 @@ class UserController {
         user.email,
         user.city,
         user.phone,
+        user.balance,
         user.role,
       );
       return res.json({
@@ -220,6 +236,7 @@ class UserController {
           email: user.email,
           city: user.city,
           phone: user.phone,
+          balance: user.balance,
           role: user.role,
         },
       });
@@ -231,14 +248,23 @@ class UserController {
     try {
       const userId = req.user.id;
       const user = await User.findByPk(userId, {
-        attributes: ["id", "firstName", "lastName", "email", "role"],
+        attributes: [
+          "id",
+          "firstName",
+          "lastName",
+          "email",
+          "role",
+          "city",
+          "phone",
+          "balance",
+        ],
       });
 
       if (!user) {
         return next(ApiError.unauthorized("Пользователь не найден"));
       }
 
-      return res.json({ user });
+      return res.json(user);
     } catch (err) {
       next(ApiError.badRequest(err.message));
     }
@@ -323,8 +349,8 @@ class UserController {
         return next(ApiError.notFound("Пользователь не найден"));
       }
 
-      if(user.role == "COMPANY" && role == "USER"){
-        await Invitation.destroy({where: {companyId: id}});
+      if (user.role == "COMPANY" && role == "USER") {
+        await Invitation.destroy({ where: { companyId: id } });
       }
 
       if (firstName !== undefined) user.firstName = firstName;
@@ -391,12 +417,28 @@ class UserController {
         );
       }
 
+      const activeInvites = await Invitation.count({
+        where: { companyId: user.id },
+      });
+      const company = await User.findByPk(user.id, {
+        include: [{ model: Plan }],
+      });
+
+      if (activeInvites >= company.plan.maxIntegrators) {
+        return next(ApiError.badRequest("Превышено количество приглашений"));
+      }
+
       const existing = await Invitation.findOne({
         where: { userId, companyId: user.id },
       });
       if (existing) {
         return next(ApiError.badRequest("Пользователь уже приглашён"));
       }
+
+      const invitation = await Invitation.create({
+        userId,
+        companyId: user.id,
+      });
 
       const tokens = await PushToken.findAll({
         where: { userId },
@@ -411,11 +453,6 @@ class UserController {
           screen: `/(tabs)/companies`,
         },
       );
-
-      const invitation = await Invitation.create({
-        userId,
-        companyId: user.id,
-      });
 
       return res.json(invitation);
     } catch (err) {
