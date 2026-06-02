@@ -10,6 +10,8 @@ const router = require("./routes/index");
 const path = require("path");
 const initSocket = require("./socket");
 
+require("./cron/billing.cron");
+
 const PORT = process.env.PORT || 8000;
 
 const app = express();
