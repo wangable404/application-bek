@@ -238,6 +238,7 @@ class SubscriptionController {
           "firstName",
           "lastName",
           "email",
+          "phone",
           "balance",
           "isBlocked",
           "trialEndsAt",
