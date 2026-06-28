@@ -35,7 +35,6 @@ const start = async () => {
     const server = http.createServer(app);
     const io = initSocket(server);
 
-    // Сохраняем io в app locals
     app.locals.io = io;
     app.set("io", io);
 
