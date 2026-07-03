@@ -1,5 +1,6 @@
-import { TelegramChat } from "../models/model.js";
-import { tgSendMessage } from "../services/telegramService.js";
+import { TelegramChat } from "../models/model";
+import { tgSendMessage } from "../services/telegram.service";
+
 
 class TelegramController {
   async webhook(req, res) {
