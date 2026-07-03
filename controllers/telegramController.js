@@ -1,6 +1,5 @@
-import { TelegramChat } from "../models/model";
-import { tgSendMessage } from "../services/telegram.service";
-
+const { TelegramChat } = require("../models/model");
+const { tgSendMessage } = require("../services/telegram.service");
 
 class TelegramController {
   async webhook(req, res) {
@@ -34,4 +33,4 @@ class TelegramController {
   }
 }
 
-export default new TelegramController();
+module.exports = new TelegramController();
