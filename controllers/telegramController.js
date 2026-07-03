@@ -1,13 +1,15 @@
-const { TelegramChat } = require("../models/model");
-const { tgSendMessage } = require("../services/telegram.service");
+import { TelegramChat } from "../models/model.js";
+import { tgSendMessage } from "../services/telegramService.js";
 
 class TelegramController {
-  async webhook(req, res,next ) {
+  async webhook(req, res) {
     try {
-      const message = req.body.message;
+      const secret = req.headers["x-relay-secret"];
+      if (secret !== process.env.RELAY_SECRET) {
+        return res.sendStatus(403);
+      }
 
-      console.log(message);
-      
+      const message = req.body.message;
 
       if (message?.text?.startsWith("/start")) {
         const chatId = message.chat.id;
@@ -20,11 +22,6 @@ class TelegramController {
             chatId,
             "✅ Уведомления подключены. Теперь вы будете получать сюда сообщения о новых заявках.",
           );
-        } else {
-          await tgSendMessage(
-            chatId,
-            "Перейдите по ссылке из приложения, чтобы подключить уведомления.",
-          );
         }
       }
 
@@ -36,4 +33,4 @@ class TelegramController {
   }
 }
 
-module.exports = new TelegramController();
+export default new TelegramController();

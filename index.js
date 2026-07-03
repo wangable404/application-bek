@@ -9,7 +9,6 @@ const errorHeandler = require("./middleware/ErrorHeadlingMiddleware");
 const router = require("./routes/index");
 const path = require("path");
 const initSocket = require("./socket");
-const { setTelegramWebhook } = require("./services/telegram.service");
 
 require("./cron/billing.cron");
 
@@ -32,7 +31,6 @@ const start = async () => {
   try {
     await sequelize.authenticate();
     await sequelize.sync();
-    await setTelegramWebhook()
 
     const server = http.createServer(app);
     const io = initSocket(server);
