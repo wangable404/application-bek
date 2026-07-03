@@ -341,12 +341,6 @@ class ApplicationController {
         return next(ApiError.badRequest("Заявка не найдена"));
       }
 
-      const tokens = await PushToken.findAll({
-        where: { userId: application.userId },
-        attributes: ["token"],
-      });
-      const pushTokens = tokens.map((t) => t.token);
-
       const notifications = {
         accepted: {
           title: "🎉 Заявка принята",
@@ -397,10 +391,13 @@ class ApplicationController {
       // Отправка push
       const notification = notifications[status];
 
-      if (notification && pushTokens.length) {
-        await sendPush(pushTokens, notification.title, notification.message, {
-          screen: "/(tabs)/applications",
-        });
+      if (notification) {
+        await notifyUser(
+          application.userId,
+          notification.title,
+          notification.message,
+          { screen: "/(tabs)/applications" },
+        );
       }
 
       application.status = status;
