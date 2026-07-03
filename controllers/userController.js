@@ -236,16 +236,6 @@ class UserController {
       if (!comparePassword) {
         return next(ApiError.badRequest("Неверный пароль"));
       }
-      const token = generateJwt(
-        user.id,
-        user.firstName,
-        user.lastName,
-        user.email,
-        user.city,
-        user.phone,
-        user.balance,
-        user.role,
-      );
 
       const telegramChat = await TelegramChat.findOne({
         where: { userId: user.id },
@@ -258,6 +248,17 @@ class UserController {
           userId: user.id,
         });
       }
+
+      const token = generateJwt(
+        user.id,
+        user.firstName,
+        user.lastName,
+        user.email,
+        user.city,
+        user.phone,
+        user.balance,
+        user.role,
+      );
 
       return res.json({
         token,
