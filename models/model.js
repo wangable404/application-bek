@@ -87,6 +87,23 @@ const PushToken = sequelize.define("push_tokens", {
   },
 });
 
+const TelegramChat = sequelize.define("telegram_chat", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  userId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+  },
+  chatId: { type: DataTypes.STRING, allowNull: false },
+});
+
 const Plan = sequelize.define("plans", {
   id: {
     type: DataTypes.UUID,
@@ -441,6 +458,9 @@ const Invitation = sequelize.define("invitations", {
 User.hasMany(PushToken, { foreignKey: "userId" });
 PushToken.belongsTo(User, { foreignKey: "userId" });
 
+User.hasOne(TelegramChat);
+TelegramChat.belongsTo(User);
+
 User.belongsTo(Plan, { foreignKey: "planId" });
 Plan.hasMany(User, { foreignKey: "planId" });
 
@@ -500,6 +520,7 @@ Message.belongsTo(User, { foreignKey: "senderId" });
 module.exports = {
   User,
   PushToken,
+  TelegramChat,
   Payment,
   Plan,
   Application,

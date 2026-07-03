@@ -4,6 +4,7 @@ const {
   Application,
   Invitation,
   Plan,
+  TelegramChat,
 } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
@@ -11,8 +12,26 @@ const bcrypt = require("bcrypt");
 const uuid = require("uuid");
 const { sendPush } = require("../services/push.service");
 
-const generateJwt = (id, firstName, lastName, email, city, phone, balance, role) => {
-  const payload = { id, firstName, lastName, email, city, phone, balance, role };
+const generateJwt = (
+  id,
+  firstName,
+  lastName,
+  email,
+  city,
+  phone,
+  balance,
+  role,
+) => {
+  const payload = {
+    id,
+    firstName,
+    lastName,
+    email,
+    city,
+    phone,
+    balance,
+    role,
+  };
   return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
 };
 
@@ -227,6 +246,19 @@ class UserController {
         user.balance,
         user.role,
       );
+
+      const telegramChat = await TelegramChat.findOne({
+        where: { userId: user.id },
+      });
+
+      if (!telegramChat) {
+        return res.json({
+          telegramConnected: false,
+          telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
+          userId: user.id,
+        });
+      }
+
       return res.json({
         token,
         user: {
