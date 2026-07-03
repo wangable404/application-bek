@@ -272,6 +272,7 @@ class UserController {
           balance: user.balance,
           role: user.role,
         },
+        telegramConnected: true,
       });
     } catch (err) {
       next(ApiError.badRequest(err.message));
