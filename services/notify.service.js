@@ -1,8 +1,8 @@
 // services/notify.service.js
-const { sendPush } = require("./sendPush.service");
 const { tgSendMessage } = require("./telegram.service");
 const { maxSendMessage } = require("./max.service");
 const { PushToken, TelegramChat, MaxChat } = require("../models/model");
+const { sendPush } = require("./push.service");
 
 async function notifyUser(userId, title, body, data = {}) {
   const [pushTokens, tgChats, maxChats] = await Promise.all([
