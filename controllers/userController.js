@@ -241,7 +241,7 @@ class UserController {
         where: { userId: user.id },
       });
 
-      if (!telegramChat) {
+      if (!telegramChat && user.role == 'USER') {
         return res.json({
           telegramConnected: false,
           telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
