@@ -7,7 +7,6 @@ const {
   User,
   PushToken,
 } = require("../models/model");
-const { sendPush } = require("../services/push.service");
 
 class ChatController {
   async getByApplication(req, res, next) {
@@ -402,13 +401,11 @@ class ChatController {
       }
 
       if (user.id !== application.userId) {
-        await sendPush(
-          tokens.map((t) => t.token),
+        await notifyUser(
+          application.userId,
           "Новая сообщение",
           text,
-          {
-            screen: `/(tabs)/applications`,
-          },
+          { screen: `/(tabs)/applications` },
         );
       }
 

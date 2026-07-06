@@ -12,7 +12,6 @@ const {
   ApplicationCompletionPhoto,
 } = require("../models/model");
 const sequelize = require("../db");
-const { sendPush } = require("../services/push.service");
 const imagekit = require("../config/imagekit");
 const { log } = require("console");
 const { notifyUser } = require("../services/notify.service");
@@ -313,14 +312,9 @@ class ApplicationController {
         attributes: ["token"],
       });
 
-      await sendPush(
-        tokens.map((t) => t.token),
-        `Заявка отклонена`,
-        "Менеджер отклонил заявку",
-        {
-          screen: `/(tabs)/applications`,
-        },
-      );
+      await notifyUser(userId, "Заявка отклонена", "Менеджер отклонил заявку", {
+        screen: `/(tabs)/applications`,
+      });
 
       application.status = "rejected";
       await application.save();
@@ -547,9 +541,10 @@ class ApplicationController {
 
       if (sendType == "default") {
         await Application.update({ status: "review" }, { where: { id } });
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🎉 Заявка на рассмотрении`,
+
+        await notifyUser(
+          userId,
+          "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
           { screen: `/(tabs)/applications` },
         );
@@ -761,9 +756,10 @@ class ApplicationController {
           { status: "review" },
           { where: { id: completion.applicationId } },
         );
-        await sendPush(
-          tokens.map((t) => t.token),
-          `🎉 Заявка на рассмотрении`,
+
+        await notifyUser(
+          userId,
+          "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
           { screen: `/(tabs)/applications` },
         );

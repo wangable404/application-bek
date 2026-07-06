@@ -11,8 +11,6 @@ const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const uuid = require("uuid");
-const { sendPush } = require("../services/push.service");
-
 const generateJwt = (
   id,
   firstName,
@@ -486,14 +484,12 @@ class UserController {
         attributes: ["token"],
       });
 
-      await sendPush(
-        tokens.map((t) => t.token),
-        `Приглашение от компании`,
-        `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
-        {
-          screen: `/(tabs)/companies`,
-        },
-      );
+      await notifyUser(
+          userId,
+          "Приглашение от компании",
+          `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
+          { screen: `/(tabs)/companies` },
+        );
 
       return res.json(invitation);
     } catch (err) {
