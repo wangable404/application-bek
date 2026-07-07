@@ -164,9 +164,6 @@ class ApplicationController {
       const { companyId, userId } = req.query;
       const user = req.user;
 
-      console.log("come");
-      console.log(companyId, userId, "zz");
-
       const completionInclude = {
         model: ApplicationCompletion,
         include: [

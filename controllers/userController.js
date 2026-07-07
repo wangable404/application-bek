@@ -236,21 +236,21 @@ class UserController {
         return next(ApiError.badRequest("Неверный пароль"));
       }
 
-      const telegramChat = await TelegramChat.findOne({
-        where: { userId: user.id },
-      });
+      // const telegramChat = await TelegramChat.findOne({
+      //   where: { userId: user.id },
+      // });
 
-      const maxChat = await MaxChat.findOne({ where: { userId: user.id } });
+      // const maxChat = await MaxChat.findOne({ where: { userId: user.id } });
 
-      if (user.role === "USER" && !telegramChat && !maxChat) {
-        return res.json({
-          telegramConnected: false,
-          telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
-          maxConnected: false,
-          maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
-          userId: user.id,
-        });
-      }
+      // if (user.role === "USER" && !telegramChat && !maxChat) {
+      //   return res.json({
+      //     telegramConnected: false,
+      //     telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
+      //     maxConnected: false,
+      //     maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
+      //     userId: user.id,
+      //   });
+      // }
       const token = generateJwt(
         user.id,
         user.firstName,
@@ -274,10 +274,10 @@ class UserController {
           balance: user.balance,
           role: user.role,
         },
-        telegramConnected: !!telegramChat,
-        telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
-        maxConnected: !!maxChat,
-        maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
+        // telegramConnected: !!telegramChat,
+        // telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
+        // maxConnected: !!maxChat,
+        // maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
       });
     } catch (err) {
       next(ApiError.badRequest(err.message));
