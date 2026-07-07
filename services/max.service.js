@@ -15,4 +15,4 @@ async function maxSendMessage(chatId, text) {
   }
 }
 
-module.exports = { maxSendMessage, setMaxWebhook };
+module.exports = { maxSendMessage };
