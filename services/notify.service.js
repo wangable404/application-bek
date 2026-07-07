@@ -5,20 +5,32 @@ const { PushToken, TelegramChat, MaxChat } = require("../models/model");
 const { sendPush } = require("./push.service");
 
 async function notifyUser(userId, title, body, data = {}) {
-  const [pushTokens, tgChats, maxChats] = await Promise.all([
-    PushToken.findAll({ where: { userId }, attributes: ["token"] }),
-    TelegramChat.findAll({ where: { userId }, attributes: ["chatId"] }),
-    MaxChat.findAll({ where: { userId }, attributes: ["chatId"] }),
-  ]);
+  // const [pushTokens, tgChats, maxChats] = await Promise.all([
+  //   PushToken.findAll({ where: { userId }, attributes: ["token"] }),
+  //   TelegramChat.findAll({ where: { userId }, attributes: ["chatId"] }),
+  //   MaxChat.findAll({ where: { userId }, attributes: ["chatId"] }),
+  // ]);
 
-  const tgText = `<b>${title}</b>\n${body}`;
-  const maxText = `${title}\n${body}`;
+  // const tgText = `<b>${title}</b>\n${body}`;
+  // const maxText = `${title}\n${body}`;
 
-  await Promise.all([
-    sendPush(pushTokens.map((t) => t.token), title, body, data),
-    ...tgChats.map((c) => tgSendMessage(c.chatId, tgText)),
-    ...maxChats.map((c) => maxSendMessage(c.chatId, maxText)),
-  ]);
+  // await Promise.all([
+  //   sendPush(pushTokens.map((t) => t.token), title, body, data),
+  //   ...tgChats.map((c) => tgSendMessage(c.chatId, tgText)),
+  //   ...maxChats.map((c) => maxSendMessage(c.chatId, maxText)),
+  // ]);
+
+  const tokens = await PushToken.findAll({
+    where: { userId },
+    attributes: ["token"],
+  });
+
+  await sendPush(
+    tokens.map((t) => t.token),
+    title,
+    body,
+    data
+  );
 }
 
 module.exports = { notifyUser };
