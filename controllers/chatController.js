@@ -7,6 +7,7 @@ const {
   User,
   PushToken,
 } = require("../models/model");
+const { notifyUser } = require("../services/notify.service");
 
 class ChatController {
   async getByApplication(req, res, next) {
