@@ -4,6 +4,11 @@ const { tgSendMessage } = require("../services/telegram.service");
 class TelegramController {
   async webhook(req, res) {
     try {
+      const secret = req.headers["x-relay-secret"];
+      if (secret !== process.env.RELAY_SECRET) {
+        return res.sendStatus(403);
+      }
+
       const message = req.body.message;
 
       if (message?.text?.startsWith("/start")) {
