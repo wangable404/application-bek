@@ -6,7 +6,7 @@
 // мобильное приложение не путали пользователя двумя разными способами
 // делать одно и то же.
 const { MaxChat, User } = require("../../models/model");
-const { verifyBindToken } = require("../../utils/jwt");
+const { verifyBindToken } = require("../../utils/maxBindToken");
 const { maxSendMessage, maxAnswerCallback } = require("../../services/max.service");
 const { getSession, resetSession } = require("./session");
 const { mainMenuKeyboard } = require("./keyboards");
@@ -53,7 +53,7 @@ async function handleBotStarted(update) {
 
   let userId;
   try {
-    userId = verifyBindToken(token);
+    userId = await verifyBindToken(token);
   } catch (err) {
     await maxSendMessage(
       chatId,

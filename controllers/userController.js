@@ -10,7 +10,8 @@ const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const uuid = require("uuid");
-const { generateJwt, generateBindToken } = require("../utils/jwt");
+const { generateJwt } = require("../utils/jwt");
+const { generateBindToken } = require("../utils/maxBindToken");
 
 class UserController {
   async create(req, res, next) {
@@ -229,7 +230,7 @@ class UserController {
       if (user.role === "USER" && !maxChat) {
         return res.json({
           maxConnected: false,
-          maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${generateBindToken(user.id)}`,
+          maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${await generateBindToken(user.id)}`,
           userId: user.id,
         });
       }
@@ -258,7 +259,7 @@ class UserController {
           role: user.role,
         },
         maxConnected: !!maxChat,
-        maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${generateBindToken(user.id)}`,
+        maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${await generateBindToken(user.id)}`,
       });
     } catch (err) {
       next(ApiError.badRequest(err.message));

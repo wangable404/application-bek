@@ -147,6 +147,29 @@ const MaxBotSession = sequelize.define("max_bot_sessions", {
   },
 });
 
+// Короткоживущий одноразовый токен для привязки MAX-аккаунта через
+// deep link (?start=...). См. utils/maxBindToken.js — MAX не передаёт
+// payload диплинка длиннее 128 символов, поэтому сам userId тут не
+// хранится в токене, а лежит рядом в этой таблице.
+const MaxBindToken = sequelize.define("max_bind_tokens", {
+  token: {
+    type: DataTypes.STRING,
+    primaryKey: true,
+  },
+  userId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+  },
+  expiresAt: {
+    type: DataTypes.DATE,
+    allowNull: false,
+  },
+});
+
 const Plan = sequelize.define("plans", {
   id: {
     type: DataTypes.UUID,
@@ -568,6 +591,7 @@ module.exports = {
   PushToken,
   MaxChat,
   MaxBotSession,
+  MaxBindToken,
   Payment,
   Plan,
   Application,
