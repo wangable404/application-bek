@@ -1,5 +1,4 @@
-const { MaxChat } = require("../models/model");
-const { maxSendMessage } = require("../services/max.service");
+const dispatcher = require("../bot/max/dispatcher");
 
 class MaxController {
   async webhook(req, res) {
@@ -9,26 +8,14 @@ class MaxController {
         return res.sendStatus(403);
       }
 
-      const update = req.body;
-      console.log(update, "max update");
-
-      if (update.update_type === "bot_started") {
-        const chatId = update.chat_id;
-        const userId = update.payload;
-
-        if (userId) {
-          await MaxChat.upsert({ userId, chatId });
-          await maxSendMessage(
-            chatId,
-            "✅ Уведомления подключены. Теперь вы будете получать сюда сообщения о новых заявках.",
-          );
-        }
-      }
-
-      return res.sendStatus(200);
+      // Отвечаем 200 сразу, обработку не заставляем ждать вебхук (MAX ретраит
+      // при таймауте), но и не проглатываем ошибки молча — они логируются
+      // внутри dispatcher.
+      res.sendStatus(200);
+      await dispatcher.handleUpdate(req.body);
     } catch (err) {
-      console.log(err);
-      return res.sendStatus(200);
+      console.log("max webhook error:", err);
+      if (!res.headersSent) res.sendStatus(200);
     }
   }
 }

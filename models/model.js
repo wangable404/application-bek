@@ -87,29 +87,40 @@ const PushToken = sequelize.define("push_tokens", {
   },
 });
 
-const TelegramChat = sequelize.define("telegram_chat", {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true,
-  },
-  userId: {
-    type: DataTypes.UUID,
-    references: {
-      model: User,
-      key: "id",
-    },
-    allowNull: false,
-  },
-  chatId: { type: DataTypes.STRING, allowNull: false },
-});
-
 const MaxChat = sequelize.define("max_chat", {
   id: {
     type: DataTypes.UUID,
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
   },
+  // unique — иначе MaxChat.upsert({userId, chatId}) в bot_started не находит,
+  // с чем конфликтовать по ON CONFLICT, и на каждый повторный /start плодит
+  // дублирующиеся строки (а значит и дублирующиеся уведомления в notify.service).
+  userId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: false,
+    unique: true,
+  },
+  chatId: { type: DataTypes.STRING, allowNull: false },
+});
+
+// Состояние диалога (FSM) MAX-бота: на каком шаге какого сценария
+// находится конкретный chatId и что уже успел собрать (черновик).
+const MaxBotSession = sequelize.define("max_bot_sessions", {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
+  chatId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
   userId: {
     type: DataTypes.UUID,
     references: {
@@ -118,7 +129,22 @@ const MaxChat = sequelize.define("max_chat", {
     },
     allowNull: false,
   },
-  chatId: { type: DataTypes.STRING, allowNull: false },
+  scenario: {
+    type: DataTypes.STRING,
+    defaultValue: "idle", // idle | start_work | complete_work | chat
+  },
+  step: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  applicationId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  data: {
+    type: DataTypes.JSONB,
+    defaultValue: {},
+  },
 });
 
 const Plan = sequelize.define("plans", {
@@ -475,11 +501,11 @@ const Invitation = sequelize.define("invitations", {
 User.hasMany(PushToken, { foreignKey: "userId" });
 PushToken.belongsTo(User, { foreignKey: "userId" });
 
-User.hasOne(TelegramChat);
-TelegramChat.belongsTo(User);
-
 User.hasOne(MaxChat);
 MaxChat.belongsTo(User);
+
+User.hasOne(MaxBotSession);
+MaxBotSession.belongsTo(User);
 
 User.belongsTo(Plan, { foreignKey: "planId" });
 Plan.hasMany(User, { foreignKey: "planId" });
@@ -540,8 +566,8 @@ Message.belongsTo(User, { foreignKey: "senderId" });
 module.exports = {
   User,
   PushToken,
-  TelegramChat,
   MaxChat,
+  MaxBotSession,
   Payment,
   Plan,
   Application,

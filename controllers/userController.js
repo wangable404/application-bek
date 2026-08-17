@@ -4,47 +4,35 @@ const {
   Application,
   Invitation,
   Plan,
-  TelegramChat,
   MaxChat,
 } = require("../models/model");
 const ApiError = require("../error/ApiError");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const uuid = require("uuid");
-const generateJwt = (
-  id,
-  firstName,
-  lastName,
-  email,
-  city,
-  phone,
-  balance,
-  role,
-) => {
-  const payload = {
-    id,
-    firstName,
-    lastName,
-    email,
-    city,
-    phone,
-    balance,
-    role,
-  };
-  return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
-};
+const { generateJwt, generateBindToken } = require("../utils/jwt");
 
 class UserController {
   async create(req, res, next) {
     try {
       const user = req.user;
-
+      
       if (user.role !== "ADMIN") {
         return next(ApiError.badRequest("Нет доступа"));
       }
 
       const { firstName, lastName, phone, city, email, password, role } =
         req.body;
+
+      if(!firstName || !lastName || !phone || !city || !email || !password || !role) {
+        return next(ApiError.badRequest("Заполните все необходимые поля"));
+      }
+
+      const existingUser = await User.findOne({ where: { email } });
+
+      if (existingUser) {
+        return next(ApiError.badRequest("Пользователь с таким email уже существует"));
+      }
 
       const hashPassword = await bcrypt.hash(password, 10);
 
@@ -228,7 +216,7 @@ class UserController {
       }
 
       if (!user.isVerified) {
-        return next(ApiError.forbidden("Подтвердите почту"));
+        return next(ApiError.forbidden("Почта не подтверждена, обратитесь к администратору"));
       }
 
       const comparePassword = await bcrypt.compare(password, user.password);
@@ -236,21 +224,16 @@ class UserController {
         return next(ApiError.badRequest("Неверный пароль"));
       }
 
-      // const telegramChat = await TelegramChat.findOne({
-      //   where: { userId: user.id },
-      // });
+      const maxChat = await MaxChat.findOne({ where: { userId: user.id } });
 
-      // const maxChat = await MaxChat.findOne({ where: { userId: user.id } });
+      if (user.role === "USER" && !maxChat) {
+        return res.json({
+          maxConnected: false,
+          maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${generateBindToken(user.id)}`,
+          userId: user.id,
+        });
+      }
 
-      // if (user.role === "USER" && !telegramChat && !maxChat) {
-      //   return res.json({
-      //     telegramConnected: false,
-      //     telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
-      //     maxConnected: false,
-      //     maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
-      //     userId: user.id,
-      //   });
-      // }
       const token = generateJwt(
         user.id,
         user.firstName,
@@ -274,10 +257,8 @@ class UserController {
           balance: user.balance,
           role: user.role,
         },
-        // telegramConnected: !!telegramChat,
-        // telegramLink: `https://t.me/${process.env.TELEGRAM_BOT_USERNAME}?start=${user.id}`,
-        // maxConnected: !!maxChat,
-        // maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${user.id}`,
+        maxConnected: !!maxChat,
+        maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${generateBindToken(user.id)}`,
       });
     } catch (err) {
       next(ApiError.badRequest(err.message));
