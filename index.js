@@ -27,10 +27,24 @@ app.get("/", (req, res) => {
   res.send("Dashboard is running!");
 });
 
+// В проекте нет отдельных миграций — новые таблицы (например, недавняя
+// max_bot_sessions) создаются через sequelize.sync() на старте. Но это
+// ~2 запроса на каждую модель при КАЖДОМ рестарте, даже когда схема не
+// менялась, — на нестабильном канале до Neon (see ECONNRESET на проде)
+// это просто лишние шансы оборваться на полпути. Поэтому sync можно
+// выключить там, где схема уже накатана, выставив DB_SYNC=false в .env,
+// и включать точечно (DB_SYNC=true) только когда добавлена новая модель.
+const shouldSync = process.env.DB_SYNC !== "false";
+
 const start = async () => {
   try {
     await sequelize.authenticate();
-    await sequelize.sync();
+
+    if (shouldSync) {
+      await sequelize.sync();
+    } else {
+      console.log("DB_SYNC=false — sequelize.sync() пропущен при старте");
+    }
 
     const server = http.createServer(app);
     const io = initSocket(server);
