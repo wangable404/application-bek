@@ -6,8 +6,6 @@ const {
   applicationCardKeyboard,
   statusLabel,
   backToMenuKeyboard,
-  inlineKeyboard,
-  callbackButton,
 } = require("../keyboards");
 
 async function listApplications(chatId, user) {
@@ -67,37 +65,8 @@ async function reject(chatId, user, applicationId) {
   await maxSendMessage(chatId, "❌ Заявка отклонена.", backToMenuKeyboard());
 }
 
-// Отфильтрованный список для пунктов меню «Начать работу» / «Завершить
-// работу» / «Чат» — кнопка на каждой заявке ведёт сразу в нужный сценарий.
-async function listForAction(chatId, user, { statusFilter, actionPrefix, emptyText }) {
-  const applications = await internalApi.getApplications(user);
-  const filtered = statusFilter
-    ? applications.filter((a) => statusFilter.includes(a.status))
-    : applications;
-
-  if (!filtered.length) {
-    await maxSendMessage(chatId, emptyText, backToMenuKeyboard());
-    return;
-  }
-
-  await maxSendMessage(
-    chatId,
-    "Выберите заявку:",
-    inlineKeyboard([
-      ...filtered.map((app) => [
-        callbackButton(
-          `#${app.dealId} · ${app.city || ""} · ${statusLabel(app.status)}`,
-          `${actionPrefix}:${app.id}`,
-        ),
-      ]),
-      [callbackButton("⬅️ В меню", "menu:root")],
-    ]),
-  );
-}
-
 module.exports = {
   listApplications,
-  listForAction,
   showCard,
   accept,
   reject,

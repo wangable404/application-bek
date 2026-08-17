@@ -101,19 +101,21 @@ async function maxDownloadAttachment(url) {
  */
 async function maxAnswerCallback(callbackId, options = {}) {
   try {
-    await maxApi.post(
-      "/answers",
-      {
-        message: options.text
-          ? {
-              text: options.text,
-              attachments: options.keyboard ? [options.keyboard] : undefined,
-            }
-          : undefined,
-        notification: options.notification,
-      },
-      { params: { callback_id: callbackId } },
-    );
+    // MAX требует, чтобы в теле обязательно был message ИЛИ notification —
+    // пустой {} отклоняется ("`message` or `notification` required").
+    // Раз мы почти всегда шлём отдельным сообщением что произошло дальше
+    // (а не редактируем исходное сообщение с кнопкой), по умолчанию просто
+    // убираем "часики" коротким тихим notification.
+    const body = options.text
+      ? {
+          message: {
+            text: options.text,
+            attachments: options.keyboard ? [options.keyboard] : undefined,
+          },
+        }
+      : { notification: { text: options.notification || " " } };
+
+    await maxApi.post("/answers", body, { params: { callback_id: callbackId } });
   } catch (err) {
     console.log("max answerCallback error:", err.response?.data || err.message);
   }

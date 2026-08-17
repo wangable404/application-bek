@@ -68,7 +68,13 @@ async function handleBotStarted(update) {
 }
 
 async function handleCallback(update) {
-  const chatId = String(update.callback?.chat_id ?? update.chat_id);
+  // Реальный апдейт: chat_id лежит в update.message.recipient.chat_id
+  // (message — это сообщение с кнопкой, под которой нажали), а не
+  // в update.callback или в update.chat_id, как можно было бы ожидать
+  // по аналогии с Telegram.
+  const chatId = String(
+    update.message?.recipient?.chat_id ?? update.callback?.chat_id ?? update.chat_id,
+  );
   const callbackId = update.callback?.callback_id;
   const payload = update.callback?.payload || "";
 
@@ -102,24 +108,6 @@ async function routeCallback(chatId, user, payload) {
         return menu.showRoot(chatId);
       case "applications":
         return applications.listApplications(chatId, user);
-      case "start_work":
-        return applications.listForAction(chatId, user, {
-          statusFilter: ["accepted"],
-          actionPrefix: "work:start",
-          emptyText: "Нет заявок, готовых к началу работы (нужен статус «принята»).",
-        });
-      case "complete_work":
-        return applications.listForAction(chatId, user, {
-          statusFilter: ["in_progress"],
-          actionPrefix: "work:complete",
-          emptyText: "Нет заявок в работе, которые можно завершить.",
-        });
-      case "chat":
-        return applications.listForAction(chatId, user, {
-          statusFilter: null,
-          actionPrefix: "chat:open",
-          emptyText: "У вас пока нет заявок.",
-        });
       case "help":
         return menu.showHelp(chatId);
     }
@@ -192,7 +180,7 @@ async function routeCallback(chatId, user, payload) {
 }
 
 async function handleMessage(update) {
-  const chatId = String(update.message?.chat_id ?? update.chat_id);
+  const chatId = String(update.message?.recipient?.chat_id ?? update.chat_id);
   const user = await resolveUser(chatId);
   if (!user) return notLinked(chatId);
 
@@ -233,8 +221,8 @@ async function handleMessage(update) {
 
     // idle — свободный текст не ожидается, подсказываем меню
     const lower = text.toLowerCase();
-    if (["меню", "помощь", "start", "старт", "/start"].includes(lower)) {
-      return await menu.showRoot(chatId);
+    if (lower === "помощь") {
+      return await menu.showHelp(chatId);
     }
     await menu.showRoot(chatId);
   } catch (err) {

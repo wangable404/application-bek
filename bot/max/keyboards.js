@@ -21,14 +21,14 @@ function linkButton(text, url) {
 // payload инлайн-кнопок — короткие машинно-читаемые строки вида
 // "action:arg1:arg2", их разбирает bot/max/dispatcher.js
 
+// Единственная точка входа. Дальше пользователь всегда идёт через
+// конкретную заявку: её карточка сама показывает нужные действия по
+// статусу (принять/отклонить, начать работу, завершить работу) и кнопку
+// чата — так же, как в application-app/app/modal.tsx. Отдельных
+// верхнеуровневых кнопок "Начать работу"/"Завершить работу"/"Чат" нет,
+// чтобы не путать пользователя, к какой заявке они относятся.
 const mainMenuKeyboard = () =>
-  inlineKeyboard([
-    [callbackButton("📋 Мои заявки", "menu:applications")],
-    [callbackButton("▶️ Начать работу", "menu:start_work")],
-    [callbackButton("✅ Завершить работу", "menu:complete_work")],
-    [callbackButton("💬 Чат с менеджером", "menu:chat")],
-    [callbackButton("❓ Помощь", "menu:help")],
-  ]);
+  inlineKeyboard([[callbackButton("📋 Все заявки", "menu:applications")]]);
 
 const backToMenuKeyboard = () =>
   inlineKeyboard([[callbackButton("⬅️ В меню", "menu:root")]]);
@@ -40,7 +40,7 @@ const applicationsListKeyboard = (applications) =>
   inlineKeyboard([
     ...applications.map((app) => [
       callbackButton(
-        `#${app.dealId} · ${app.city || ""} · ${statusLabel(app.status)}`,
+        `#${app.dealId} · ${app.clientBio || app.city || "—"} · ${statusLabel(app.status)}`,
         `app:open:${app.id}`,
       ),
     ]),
