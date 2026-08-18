@@ -17,10 +17,14 @@ const completeWork = require("./scenarios/completeWork");
 const chat = require("./scenarios/chat");
 
 async function resolveUser(chatId) {
-  const maxChat = await MaxChat.findOne({ where: { chatId: String(chatId) } });
-  if (!maxChat) return null;
-  const user = await User.findByPk(maxChat.userId);
-  return user;
+  // Один запрос вместо двух (MaxChat -> User одним include) — на каждый
+  // апдейт от MAX это вызывается всегда первым, вторая последовательная
+  // БД-round-trip тут просто не нужна.
+  const maxChat = await MaxChat.findOne({
+    where: { chatId: String(chatId) },
+    include: [{ model: User }],
+  });
+  return maxChat?.user || null;
 }
 
 // TODO: убрать после того, как вживую сверим реальный формат апдейтов MAX
@@ -184,7 +188,7 @@ async function routeCallback(chatId, user, payload) {
   if (ns === "chat") {
     switch (action) {
       case "open":
-        return chat.open(chatId, user, arg);
+        return chat.open(chatId, user, session, arg);
       case "exit":
         return chat.exit(chatId, user, session);
     }

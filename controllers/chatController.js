@@ -1,38 +1,31 @@
 const { Op } = require("sequelize");
 const ApiError = require("../error/ApiError");
-const {
-  Chat,
-  Message,
-  Application,
-  User,
-  PushToken,
-} = require("../models/model");
+const { Chat, Message, Application, User } = require("../models/model");
 const { notifyChatMessage } = require("../services/notify.service");
 
 class ChatController {
   async getByApplication(req, res, next) {
     try {
       const { applicationId } = req.params;
-      const userId = req.user.id;
+      const user = req.user; // роль/id уже есть из JWT, повторный User.findByPk не нужен
 
-      const user = await User.findByPk(userId);
-      if (!user) {
-        return next(ApiError.badRequest("Пользователь не найден"));
-      }
+      // Заявка и чат одним запросом (Application.hasOne(Chat)) вместо двух
+      // последовательных — это самый частый способ открыть чат и из
+      // приложения, и из бота, важно, чтобы он не тормозил.
+      const application = await Application.findByPk(applicationId, {
+        attributes: ["id", "userId"],
+        include: [{ model: Chat, attributes: ["id"] }],
+      });
 
-      const application = await Application.findByPk(applicationId);
       if (!application) {
-        return next(ApiError.badRequest("Заявка не найдена"));
+        return next(ApiError.badRequest("Заявка не найдена"));
       }
 
-      if (user.role === "USER" && application.userId !== userId) {
+      if (user.role === "USER" && application.userId !== user.id) {
         return next(ApiError.forbidden("Нет доступа"));
       }
 
-      const chat = await Chat.findOne({
-        where: { applicationId: applicationId },
-      });
-
+      const chat = application.chat;
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
@@ -129,24 +122,14 @@ class ChatController {
       const userId = req.user.id;
 
       const chat = await Chat.findByPk(chatId, {
-        include: [
-          {
-            model: Application,
-            attributes: ["id"],
-          },
-        ],
+        include: [{ model: Application, attributes: ["id", "userId"] }],
       });
 
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
 
-      // Проверка прав доступа
-      const application = await Application.findByPk(chat.applicationId, {
-        include: [{ model: User }],
-      });
-
-      if (req.user.role === "USER" && application.userId !== req.user.id) {
+      if (req.user.role === "USER" && chat.application.userId !== req.user.id) {
         return next(ApiError.forbidden("Нет доступа к этому чату"));
       }
 
@@ -191,23 +174,14 @@ class ChatController {
       const userId = req.user.id;
 
       const chat = await Chat.findByPk(chatId, {
-        include: [
-          {
-            model: Application,
-            attributes: ["id"],
-          },
-        ],
+        include: [{ model: Application, attributes: ["id", "userId"] }],
       });
 
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
 
-      const application = await Application.findByPk(chat.applicationId, {
-        include: [{ model: User }],
-      });
-
-      if (req.user.role === "USER" && application.userId !== req.user.id) {
+      if (req.user.role === "USER" && chat.application.userId !== req.user.id) {
         return next(ApiError.forbidden("Нет доступа к этому чату"));
       }
 
@@ -334,31 +308,27 @@ class ChatController {
         return next(ApiError.badRequest("Сообщение пустое"));
       }
 
+      // Один запрос вместо двух (чат + заявка одним include) — раньше
+      // здесь же был отдельный поход за PushToken, который вообще нигде
+      // не использовался (мёртвый код).
       const chat = await Chat.findOne({
         where: { applicationId },
-      });
-
-      const application = await Application.findByPk(applicationId);
-
-      const tokens = await PushToken.findAll({
-        where: { userId: application.userId },
-        attributes: ["token"],
+        include: [{ model: Application, attributes: ["id", "userId"] }],
       });
 
       if (!chat) {
         return next(ApiError.badRequest("Чат не найден"));
       }
 
+      const io = req.app.get("io");
+
       if (chat.archived) {
-        // Автоматически разархивируем чат при новом сообщении
         await chat.update({
           archived: false,
           archivedAt: null,
           archivedBy: null,
         });
 
-        // Отправляем событие разархивации
-        const io = req.app.get("io");
         if (io) {
           io.emit("chat_unarchived", {
             chatId: chat.id,
@@ -374,26 +344,20 @@ class ChatController {
         text: text.trim(),
       });
 
-      const fullMessage = await Message.findByPk(message.id, {
-        include: [
-          {
-            model: User,
-            attributes: ["id", "firstName", "lastName", "role"],
-          },
-        ],
-      });
+      // Автора сообщения уже знаем из req.user (это он и есть) — не нужно
+      // повторно идти в БД за тем же самым через Message.findByPk(...).
+      const fullMessage = {
+        ...message.toJSON(),
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        },
+      };
 
-      await chat.update({ updatedAt: new Date() });
-
-      // ✅ Отправляем сообщение через Socket.io
-      const io = req.app.get("io");
       if (io) {
-        io.to(`chat_${applicationId}`).emit("new_message", {
-          ...fullMessage.toJSON(),
-          user: fullMessage.user,
-        });
-
-        // Также отправляем обновление списка чатов
+        io.to(`chat_${applicationId}`).emit("new_message", fullMessage);
         io.emit("chat_updated", {
           chatId: chat.id,
           applicationId,
@@ -401,15 +365,18 @@ class ChatController {
         });
       }
 
-      if (user.id !== application.userId) {
-        // Сообщение уже создано и разослано по сокету — сбой доставки
-        // уведомления (push/MAX) не должен превращать уже состоявшуюся
-        // отправку сообщения в ошибку для отправителя.
-        try {
-          await notifyChatMessage(application.userId, applicationId, text);
-        } catch (notifyErr) {
-          console.log("notifyChatMessage error:", notifyErr.message);
-        }
+      // Ничего из этого не должно задерживать ответ отправителю или
+      // проваливать уже состоявшуюся отправку сообщения — оно уже создано
+      // и разослано по сокету. touch updatedAt (для сортировки списка
+      // чатов) и уведомление в push/MAX уходят фоном.
+      chat.update({ updatedAt: new Date() }).catch((err) => {
+        console.log("chat touch updatedAt error:", err.message);
+      });
+
+      if (user.id !== chat.application.userId) {
+        notifyChatMessage(chat.application.userId, applicationId, text).catch(
+          (err) => console.log("notifyChatMessage error:", err.message),
+        );
       }
 
       return res.json(fullMessage);
