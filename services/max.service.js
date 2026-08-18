@@ -23,6 +23,27 @@ const maxApi = axios.create({
   timeout: 15000,
 });
 
+// Изредка запросы до platform-api2.max.ru рвутся на нестабильном канале
+// прямо в процессе (видели и ECONNRESET, и "Can't deserialize body" —
+// похоже на повреждение тела запроса при обрыве, а не баг в самом теле,
+// раз оно не меняется и ошибка не всегда). Один быстрый повтор почти
+// ничего не стоит, а для сообщений в чате — единственное, что реально
+// решает жалобу "сообщения не доходят".
+async function postWithRetry(path, body, config, attempts = 2) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await maxApi.post(path, body, config);
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Отправить текстовое сообщение, опционально с инлайн-клавиатурой.
  * @param {string|number} chatId
@@ -32,7 +53,7 @@ const maxApi = axios.create({
 async function maxSendMessage(chatId, text, keyboard) {
   try {
     const attachments = keyboard ? [keyboard] : undefined;
-    const response = await maxApi.post(
+    const response = await postWithRetry(
       "/messages",
       { text, attachments },
       { params: { chat_id: chatId } },
@@ -133,7 +154,7 @@ async function maxAnswerCallback(callbackId, options = {}) {
         }
       : { notification: { text: options.notification || " " } };
 
-    await maxApi.post("/answers", body, { params: { callback_id: callbackId } });
+    await postWithRetry("/answers", body, { params: { callback_id: callbackId } });
   } catch (err) {
     console.log("max answerCallback error:", err.response?.data || err.message);
   }

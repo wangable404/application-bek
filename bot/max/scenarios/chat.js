@@ -6,34 +6,26 @@ const { setScenario, resetSession } = require("../session");
 const { chatExitKeyboard } = require("../keyboards");
 const { showCard } = require("./applications");
 
-const HISTORY_LIMIT = 10;
-
 async function open(chatId, user, applicationId) {
   await setScenario(chatId, "chat", null, {
     applicationId,
     data: { applicationId },
   });
 
-  const { chatId: internalChatId, messages } = await internalApi.getChat(
-    user,
-    applicationId,
+  // Сразу подключаем к чату, без истории и без ожидания похода в БД —
+  // это просто должно быть быстро. Отметку "прочитано" делаем фоном,
+  // на сам факт открытия чата это никак не влияет.
+  await maxSendMessage(
+    chatId,
+    "💬 Вы подключены к чату с менеджером.\n" +
+      "Чтобы выйти из чата, напишите «выйти».",
+    chatExitKeyboard(),
   );
-  await internalApi.markChatRead(user, internalChatId);
 
-  const history = messages.slice(-HISTORY_LIMIT).map((m) => {
-    const who = m.senderId === user.id ? "Вы" : m.user?.firstName || "Менеджер";
-    return `${who}: ${m.text}`;
-  });
-
-  const intro =
-    "💬 Менеджер скоро подключится к чату.\n" +
-    "Чтобы выйти из чата, напишите «выйти».";
-
-  const text = history.length
-    ? `${intro}\n\n${history.join("\n")}`
-    : intro;
-
-  await maxSendMessage(chatId, text, chatExitKeyboard());
+  internalApi
+    .getChat(user, applicationId)
+    .then(({ chatId: internalChatId }) => internalApi.markChatRead(user, internalChatId))
+    .catch((err) => console.log("max chat markRead error:", err.message));
 }
 
 async function forward(chatId, user, session, text) {

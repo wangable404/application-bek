@@ -402,7 +402,14 @@ class ChatController {
       }
 
       if (user.id !== application.userId) {
-        await notifyChatMessage(application.userId, applicationId, text);
+        // Сообщение уже создано и разослано по сокету — сбой доставки
+        // уведомления (push/MAX) не должен превращать уже состоявшуюся
+        // отправку сообщения в ошибку для отправителя.
+        try {
+          await notifyChatMessage(application.userId, applicationId, text);
+        } catch (notifyErr) {
+          console.log("notifyChatMessage error:", notifyErr.message);
+        }
       }
 
       return res.json(fullMessage);

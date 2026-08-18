@@ -13,7 +13,9 @@ async function notifyUser(userId, title, body, data = {}) {
 
   const maxText = `${title}\n${body}`;
 
-  await Promise.all([
+  // allSettled, не all: один упавший канал (например, временный сбой MAX)
+  // не должен помешать доставить push, и наоборот.
+  await Promise.allSettled([
     sendPush(
       tokens.map((t) => t.token),
       title,
@@ -46,19 +48,26 @@ async function notifyChatMessage(userId, applicationId, text) {
   ];
 
   if (maxChat) {
-    const session = await MaxBotSession.findOne({
-      where: { chatId: maxChat.chatId },
-    });
-    const isOpenInThisChat =
-      session?.scenario === "chat" &&
-      String(session.applicationId) === String(applicationId);
+    try {
+      const session = await MaxBotSession.findOne({
+        where: { chatId: maxChat.chatId },
+      });
+      const isOpenInThisChat =
+        session?.scenario === "chat" &&
+        String(session.applicationId) === String(applicationId);
 
-    if (isOpenInThisChat) {
-      tasks.push(maxSendMessage(maxChat.chatId, text));
+      if (isOpenInThisChat) {
+        tasks.push(maxSendMessage(maxChat.chatId, text));
+      }
+    } catch (err) {
+      // Не удалось даже проверить, открыт ли чат в MAX (та же сетевая
+      // нестабильность до БД) — просто не шлём в MAX в этот раз, push
+      // всё равно уйдёт.
+      console.log("notifyChatMessage session lookup error:", err.message);
     }
   }
 
-  await Promise.all(tasks);
+  await Promise.allSettled(tasks);
 }
 
 module.exports = { notifyUser, notifyChatMessage };

@@ -251,11 +251,34 @@ async function handleMessage(update) {
 // (ApiError) — показываем её вместо немого "попробуйте ещё раз", иначе
 // пользователь просто зацикливается на одной и той же ошибке. Кнопку
 // меню сюда специально не добавляем — на любом шаге доступна "Отмена".
+//
+// Но часть ошибок, которые долетают в этом же поле — не валидация, а
+// сырые технические сбои (обрыв соединения с БД, таймаут) — их бэкенд
+// заворачивает в тот же ApiError.badRequest(err.message), не различая
+// "это для пользователя" и "это для логов". Такие показывать как есть
+// нельзя, это не читаемо и не помогает — вместо этого просто "повторите
+// попытку" (что и работает — при повторном нажатии обычно проходит).
+const INFRA_ERROR_PATTERNS = [
+  /connection terminated/i,
+  /econnreset/i,
+  /etimedout/i,
+  /econnaborted/i,
+  /econnrefused/i,
+  /timeout/i,
+  /sequelize/i,
+  /can't deserialize body/i,
+];
+
 function friendlyErrorText(err) {
-  const backendMessage = err?.response?.data?.message;
-  return backendMessage
-    ? `⚠️ ${backendMessage}`
-    : "⚠️ Что-то пошло не так, попробуйте ещё раз.";
+  const backendMessage = err?.response?.data?.message || err?.message;
+  const isInfraError =
+    !err?.response ||
+    INFRA_ERROR_PATTERNS.some((re) => re.test(backendMessage || ""));
+
+  if (isInfraError) {
+    return "⚠️ Не удалось выполнить, попробуйте ещё раз.";
+  }
+  return `⚠️ ${backendMessage}`;
 }
 
 async function hint(chatId) {

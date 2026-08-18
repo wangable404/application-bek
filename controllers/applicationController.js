@@ -304,17 +304,20 @@ class ApplicationController {
         where: { userId, dealId },
       });
 
-      const tokens = await PushToken.findAll({
-        where: { userId },
-        attributes: ["token"],
-      });
-
-      await notifyUser(userId, "Заявка отклонена", "Менеджер отклонил заявку", {
-        screen: `/(tabs)/applications`,
-      });
-
       application.status = "rejected";
       await application.save();
+
+      // Уведомление — уже после того, как статус реально сохранён: сбой
+      // отправки (push/MAX) не должен превращать выполненное действие
+      // в ошибку для того, кто его вызвал.
+      try {
+        await notifyUser(userId, "Заявка отклонена", "Менеджер отклонил заявку", {
+          screen: `/(tabs)/applications`,
+        });
+      } catch (notifyErr) {
+        console.log("notifyUser error:", notifyErr.message);
+      }
+
       return res.json(application);
     } catch (err) {
       return next(ApiError.badRequest(err.message));
@@ -379,20 +382,24 @@ class ApplicationController {
         }
       }
 
-      // Отправка push
-      const notification = notifications[status];
-
-      if (notification) {
-        await notifyUser(
-          application.userId,
-          notification.title,
-          notification.message,
-          { screen: "/(tabs)/applications" },
-        );
-      }
-
       application.status = status;
       await application.save();
+
+      // Уведомление — после сохранения статуса и без права заблокировать
+      // уже выполненное изменение при сбое отправки.
+      const notification = notifications[status];
+      if (notification) {
+        try {
+          await notifyUser(
+            application.userId,
+            notification.title,
+            notification.message,
+            { screen: "/(tabs)/applications" },
+          );
+        } catch (notifyErr) {
+          console.log("notifyUser error:", notifyErr.message);
+        }
+      }
 
       return res.json(application);
     } catch (err) {
