@@ -96,7 +96,23 @@ const yesNoKeyboard = (yesPayload, noPayload) =>
 const completeWorkSummaryKeyboard = () =>
   inlineKeyboard([
     [callbackButton("📤 Отправить", "complete:submit")],
-    [callbackButton("🔄 Начать заново", "complete:restart")],
+    [callbackButton("🚗 Добавить ещё автомобиль", "complete:add_more_car")],
+    [callbackButton("🔄 Начать всё заново", "complete:restart")],
+    [callbackButton("✖️ Отмена", "scenario:cancel")],
+  ]);
+
+const restartConfirmKeyboard = () =>
+  inlineKeyboard([
+    [callbackButton("Да, стереть всё", "complete:restart_yes")],
+    [callbackButton("Нет, вернуться", "complete:restart_no")],
+  ]);
+
+const carMoreKeyboard = () =>
+  inlineKeyboard([
+    [
+      callbackButton("✅ Да, ещё авто", "complete:car_more_yes"),
+      callbackButton("➡️ Нет, дальше", "complete:car_more_no"),
+    ],
     [callbackButton("✖️ Отмена", "scenario:cancel")],
   ]);
 
@@ -129,6 +145,8 @@ module.exports = {
   skipKeyboard,
   yesNoKeyboard,
   completeWorkSummaryKeyboard,
+  restartConfirmKeyboard,
+  carMoreKeyboard,
   chatExitKeyboard,
   statusLabel,
 };

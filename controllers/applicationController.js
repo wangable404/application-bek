@@ -462,95 +462,99 @@ class ApplicationController {
         return next(ApiError.badRequest("Не загружены фотографии автомобиля"));
       }
 
-      // --- Создание записи завершения (чтобы получить completionId) ---
-      const completion = await ApplicationCompletion.create({
-        brand,
-        stateNumber,
-        applicationId: id,
-      });
-
-      const completionId = completion.id.toString();
-
-      // --- Сохранение фотографий автомобиля локально ---
-      const photoPaths = [];
-      for (const file of photoFiles) {
-        const relativePath = await saveFileLocally(
-          file,
-          id,
-          completionId,
-          "photos",
+      // Всё, что пишет в БД ниже, идёт одной транзакцией: если что-то из
+      // этого упадёт (например, повторная отправка после сбойного ответа
+      // ботом/приложением), в базе не должно остаться половинчатой записи
+      // завершения, которую потом легко продублировать повторной попыткой.
+      const completion = await sequelize.transaction(async (t) => {
+        // --- Создание записи завершения (чтобы получить completionId) ---
+        const completion = await ApplicationCompletion.create(
+          { brand, stateNumber, applicationId: id },
+          { transaction: t },
         );
-        photoPaths.push(relativePath);
-      }
 
-      // Сохраняем записи фото в БД
-      for (const pPath of photoPaths) {
-        await ApplicationCompletionPhoto.create({
-          path: pPath, // относительный путь
-          completionId: completion.id,
-        });
-      }
+        const completionId = completion.id.toString();
 
-      // --- Обработка оборудования ---
-      const equipmentArray = Object.keys(equipmentMap)
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map((idx) => equipmentMap[idx]);
-
-      for (const eq of equipmentArray) {
-        if (!eq.equipment) continue;
-
-        // Обработка imeiPhoto для текущего оборудования
-        let imeiPhotoPath = null;
-        const imeiPhotoFile =
-          req.files && req.files[`equipment[${eq.index}]?.imeiPhoto`]; // индекс из цикла не сохранился, нужно переделать
-
-        // Чтобы сопоставить файлы, переберём ключи req.files
-        const imeiPhotoKey = Object.keys(req.files || {}).find(
-          (k) =>
-            k.startsWith(`equipment[${equipmentArray.indexOf(eq)}]`) &&
-            k.endsWith(".imeiPhoto"),
-        );
-        const imeiFile = imeiPhotoKey ? req.files[imeiPhotoKey] : null;
-
-        if (imeiFile) {
-          imeiPhotoPath = await saveFileLocally(
-            imeiFile,
+        // --- Сохранение фотографий автомобиля локально ---
+        const photoPaths = [];
+        for (const file of photoFiles) {
+          const relativePath = await saveFileLocally(
+            file,
             id,
             completionId,
-            "imei",
+            "photos",
+          );
+          photoPaths.push(relativePath);
+        }
+
+        // Сохраняем записи фото в БД
+        for (const pPath of photoPaths) {
+          await ApplicationCompletionPhoto.create(
+            { path: pPath, completionId: completion.id },
+            { transaction: t },
           );
         }
 
-        await ApplicationCompletionEquipment.create({
-          equipment: eq.equipment,
-          imei: eq.imei || null,
-          imeiPhoto: imeiPhotoPath, // относительный путь
-          completionId: completion.id,
-        });
-      }
+        // --- Обработка оборудования ---
+        const equipmentArray = Object.keys(equipmentMap)
+          .sort((a, b) => parseInt(a) - parseInt(b))
+          .map((idx) => equipmentMap[idx]);
 
-      // --- Пуш-уведомления и обновление статуса (без изменений) ---
-      const userId = req.user.id;
-      const tokens = await PushToken.findAll({
-        where: { userId },
-        attributes: ["token"],
+        for (const eq of equipmentArray) {
+          if (!eq.equipment) continue;
+
+          let imeiPhotoPath = null;
+          const imeiPhotoKey = Object.keys(req.files || {}).find(
+            (k) =>
+              k.startsWith(`equipment[${equipmentArray.indexOf(eq)}]`) &&
+              k.endsWith(".imeiPhoto"),
+          );
+          const imeiFile = imeiPhotoKey ? req.files[imeiPhotoKey] : null;
+
+          if (imeiFile) {
+            imeiPhotoPath = await saveFileLocally(
+              imeiFile,
+              id,
+              completionId,
+              "imei",
+            );
+          }
+
+          await ApplicationCompletionEquipment.create(
+            {
+              equipment: eq.equipment,
+              imei: eq.imei || null,
+              imeiPhoto: imeiPhotoPath,
+              completionId: completion.id,
+            },
+            { transaction: t },
+          );
+        }
+
+        if (sendType == "default") {
+          await Application.update(
+            { status: "review" },
+            { where: { id }, transaction: t },
+          );
+        }
+
+        await Application.update(
+          { completionComment, additionalWork, actSigned },
+          { where: { id: completion.applicationId }, transaction: t },
+        );
+
+        return completion;
       });
 
+      // Уведомление — уже после успешного коммита транзакции.
       if (sendType == "default") {
-        await Application.update({ status: "review" }, { where: { id } });
-
         await notifyUser(
-          userId,
+          req.user.id,
           "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
           { screen: `/(tabs)/applications` },
         );
       }
-
-      await Application.update(
-        { completionComment, additionalWork, actSigned },
-        { where: { id: completion.applicationId } },
-      );
 
       return res.json({ success: true, completionId: completion.id });
     } catch (err) {
@@ -589,120 +593,125 @@ class ApplicationController {
       const applicationId = completion.applicationId.toString();
       const compId = completion.id.toString();
 
-      // 1. Обновляем основные поля
-      await completion.update({ brand, stateNumber });
+      // Как и в completeApplication — вся запись идёт одной транзакцией,
+      // чтобы сбойный ответ и повторная попытка не оставляли в базе
+      // наполовину применённые изменения (часть фото/оборудования
+      // обновилась, часть — нет).
+      await sequelize.transaction(async (t) => {
+        // 1. Обновляем основные поля
+        await completion.update({ brand, stateNumber }, { transaction: t });
 
-      // 2. Обработка фото автомобиля
-      let existingPhotoIds = req.body.existingPhotos;
-      if (existingPhotoIds && !Array.isArray(existingPhotoIds)) {
-        existingPhotoIds = [existingPhotoIds];
-      }
-      existingPhotoIds = existingPhotoIds || [];
+        // 2. Обработка фото автомобиля
+        let existingPhotoIds = req.body.existingPhotos;
+        if (existingPhotoIds && !Array.isArray(existingPhotoIds)) {
+          existingPhotoIds = [existingPhotoIds];
+        }
+        existingPhotoIds = existingPhotoIds || [];
 
-      // Удаляем фото, которых нет в списке (и их файлы)
-      const photosToDelete = completion.photos.filter(
-        (p) => !existingPhotoIds.includes(p.id),
-      );
-      for (const photo of photosToDelete) {
-        // Удаляем файл с диска
-        const fullPath = path.resolve(__dirname, "..", "static", photo.path);
-        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-        await photo.destroy();
-      }
-
-      // Добавляем новые фото из файлов
-      let photoFiles = [];
-      if (req.files && req.files.photos) {
-        photoFiles = Array.isArray(req.files.photos)
-          ? req.files.photos
-          : [req.files.photos];
-      }
-
-      for (const file of photoFiles) {
-        const relativePath = await saveFileLocally(
-          file,
-          applicationId,
-          compId,
-          "photos",
+        // Удаляем фото, которых нет в списке (и их файлы)
+        const photosToDelete = completion.photos.filter(
+          (p) => !existingPhotoIds.includes(p.id),
         );
-        await ApplicationCompletionPhoto.create({
-          path: relativePath,
-          completionId: completion.id,
-        });
-      }
-
-      // 3. Обработка оборудования
-      const equipmentMap = {};
-      Object.keys(req.body).forEach((key) => {
-        const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
-        if (match) {
-          const index = match[1];
-          const field = match[2];
-          if (!equipmentMap[index]) equipmentMap[index] = {};
-          equipmentMap[index][field] = req.body[key];
-        }
-      });
-
-      // Собираем файлы imeiPhoto
-      const imeiPhotoFiles = {};
-      if (req.files) {
-        Object.keys(req.files).forEach((key) => {
-          const match = key.match(/^equipment\[(\d+)\]\.imeiPhoto$/);
-          if (match) {
-            imeiPhotoFiles[match[1]] = req.files[key];
-          }
-        });
-      }
-
-      // Обрабатываем каждую запись оборудования
-      for (const [idxStr, eqData] of Object.entries(equipmentMap)) {
-        const index = parseInt(idxStr);
-        const equipmentId = eqData.id;
-        let equipment;
-
-        if (equipmentId) {
-          equipment = completion.equipments.find((e) => e.id === equipmentId);
-          if (!equipment) continue;
-          await equipment.update({
-            equipment: eqData.equipment || "",
-            imei: eqData.imei || null,
-          });
-        } else {
-          equipment = await ApplicationCompletionEquipment.create({
-            equipment: eqData.equipment || "",
-            imei: eqData.imei || null,
-            completionId: completion.id,
-          });
+        for (const photo of photosToDelete) {
+          const fullPath = path.resolve(__dirname, "..", "static", photo.path);
+          if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+          await photo.destroy({ transaction: t });
         }
 
-        // Обработка imeiPhoto
-        const imeiFile = imeiPhotoFiles[idxStr];
-        const existingImeiPhotoId = eqData.imeiPhotoId; // если передали id существующего фото (но теперь это не нужно, т.к. путь хранится в equipment.imeiPhoto)
+        // Добавляем новые фото из файлов
+        let photoFiles = [];
+        if (req.files && req.files.photos) {
+          photoFiles = Array.isArray(req.files.photos)
+            ? req.files.photos
+            : [req.files.photos];
+        }
 
-        if (imeiFile) {
-          // Удаляем старый файл, если был
-          if (equipment.imeiPhoto) {
-            const oldPath = path.resolve(
-              __dirname,
-              "..",
-              "static",
-              equipment.imeiPhoto,
-            );
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-          }
-          // Сохраняем новый
+        for (const file of photoFiles) {
           const relativePath = await saveFileLocally(
-            imeiFile,
+            file,
             applicationId,
             compId,
-            "imei",
+            "photos",
           );
-          await equipment.update({ imeiPhoto: relativePath });
-        } else if (existingImeiPhotoId) {
-          // Оставляем без изменений
-        } else {
-          // Удаляем существующее фото, если оно было
-          if (equipment.imeiPhoto) {
+          await ApplicationCompletionPhoto.create(
+            { path: relativePath, completionId: completion.id },
+            { transaction: t },
+          );
+        }
+
+        // 3. Обработка оборудования
+        const equipmentMap = {};
+        Object.keys(req.body).forEach((key) => {
+          const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
+          if (match) {
+            const index = match[1];
+            const field = match[2];
+            if (!equipmentMap[index]) equipmentMap[index] = {};
+            equipmentMap[index][field] = req.body[key];
+          }
+        });
+
+        // Собираем файлы imeiPhoto
+        const imeiPhotoFiles = {};
+        if (req.files) {
+          Object.keys(req.files).forEach((key) => {
+            const match = key.match(/^equipment\[(\d+)\]\.imeiPhoto$/);
+            if (match) {
+              imeiPhotoFiles[match[1]] = req.files[key];
+            }
+          });
+        }
+
+        // Обрабатываем каждую запись оборудования
+        for (const [idxStr, eqData] of Object.entries(equipmentMap)) {
+          const equipmentId = eqData.id;
+          let equipment;
+
+          if (equipmentId) {
+            equipment = completion.equipments.find((e) => e.id === equipmentId);
+            if (!equipment) continue;
+            await equipment.update(
+              { equipment: eqData.equipment || "", imei: eqData.imei || null },
+              { transaction: t },
+            );
+          } else {
+            equipment = await ApplicationCompletionEquipment.create(
+              {
+                equipment: eqData.equipment || "",
+                imei: eqData.imei || null,
+                completionId: completion.id,
+              },
+              { transaction: t },
+            );
+          }
+
+          // Обработка imeiPhoto
+          const imeiFile = imeiPhotoFiles[idxStr];
+          const existingImeiPhotoId = eqData.imeiPhotoId;
+
+          if (imeiFile) {
+            if (equipment.imeiPhoto) {
+              const oldPath = path.resolve(
+                __dirname,
+                "..",
+                "static",
+                equipment.imeiPhoto,
+              );
+              if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+            const relativePath = await saveFileLocally(
+              imeiFile,
+              applicationId,
+              compId,
+              "imei",
+            );
+            await equipment.update(
+              { imeiPhoto: relativePath },
+              { transaction: t },
+            );
+          } else if (existingImeiPhotoId) {
+            // Оставляем без изменений
+          } else if (equipment.imeiPhoto) {
             const oldPath = path.resolve(
               __dirname,
               "..",
@@ -710,52 +719,46 @@ class ApplicationController {
               equipment.imeiPhoto,
             );
             if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            await equipment.update({ imeiPhoto: null });
+            await equipment.update({ imeiPhoto: null }, { transaction: t });
           }
         }
-      }
 
-      // Удаление оборудования, не упомянутого в запросе
-      const processedEquipmentIds = Object.values(equipmentMap)
-        .map((eq) => eq.id)
-        .filter((id) => id);
-      const equipmentToDelete = completion.equipments.filter(
-        (eq) => !processedEquipmentIds.includes(eq.id),
-      );
-      for (const eq of equipmentToDelete) {
-        // Удаляем связанный imeiPhoto с диска
-        if (eq.imeiPhoto) {
-          const photoPath = path.resolve(
-            __dirname,
-            "..",
-            "static",
-            eq.imeiPhoto,
-          );
-          if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+        // Удаление оборудования, не упомянутого в запросе
+        const processedEquipmentIds = Object.values(equipmentMap)
+          .map((eq) => eq.id)
+          .filter((id) => id);
+        const equipmentToDelete = completion.equipments.filter(
+          (eq) => !processedEquipmentIds.includes(eq.id),
+        );
+        for (const eq of equipmentToDelete) {
+          if (eq.imeiPhoto) {
+            const photoPath = path.resolve(
+              __dirname,
+              "..",
+              "static",
+              eq.imeiPhoto,
+            );
+            if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+          }
+          await eq.destroy({ transaction: t });
         }
-        await eq.destroy();
-      }
 
-      // Пуш и обновление заявки
-      const userId = req.user.id;
-      const tokens = await PushToken.findAll({
-        where: { userId },
-        attributes: ["token"],
-      });
-
-      await Application.update(
-        { completionComment, additionalWork, actSigned },
-        { where: { id: completion.applicationId } },
-      );
-
-      if (sendType === "default") {
         await Application.update(
-          { status: "review" },
-          { where: { id: completion.applicationId } },
+          { completionComment, additionalWork, actSigned },
+          { where: { id: completion.applicationId }, transaction: t },
         );
 
+        if (sendType === "default") {
+          await Application.update(
+            { status: "review" },
+            { where: { id: completion.applicationId }, transaction: t },
+          );
+        }
+      });
+
+      if (sendType === "default") {
         await notifyUser(
-          userId,
+          req.user.id,
           "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
           { screen: `/(tabs)/applications` },

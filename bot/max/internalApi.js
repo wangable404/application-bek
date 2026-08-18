@@ -7,16 +7,23 @@
 // который блокируется на мобильном интернете, здесь ни при чём:
 // сервер стучится сам в себя.
 const axios = require("axios");
+const http = require("http");
 const { generateSystemJwt } = require("../../utils/jwt");
 
 const PORT = process.env.PORT || 8000;
 const BASE_URL = `http://127.0.0.1:${PORT}/api/v1`;
+const keepAliveAgent = new http.Agent({ keepAlive: true });
 
 function client(user) {
   const token = generateSystemJwt(user);
   return axios.create({
     baseURL: BASE_URL,
     headers: { Authorization: `Bearer ${token}` },
+    httpAgent: keepAliveAgent,
+    // Фотоотчёт с несколькими машинами/фото может грузиться дольше обычного
+    // запроса — таймаут не такой жёсткий, как у внешних вызовов к MAX, но
+    // не бесконечный, чтобы зависший запрос не вис молча вечно.
+    timeout: 60000,
   });
 }
 

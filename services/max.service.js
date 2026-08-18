@@ -5,13 +5,22 @@
 // от блокировок мобильного интернета (это трафик сервер-сервер и до, и после),
 // а только добавляет лишний хоп и точку отказа.
 const axios = require("axios");
+const https = require("https");
 
 const MAX_API = "https://platform-api2.max.ru";
 const MAX_BOT_TOKEN = process.env.MAX_BOT_TOKEN;
 
+// keepAlive: без него каждый вызов (а на одно нажатие кнопки их обычно
+// минимум два — answerCallback + ответное сообщение) заново поднимает
+// TLS-соединение до platform-api2.max.ru, это и давало заметные задержки
+// даже там, где нет никакой работы с БД.
+const keepAliveAgent = new https.Agent({ keepAlive: true });
+
 const maxApi = axios.create({
   baseURL: MAX_API,
   headers: { Authorization: MAX_BOT_TOKEN },
+  httpsAgent: keepAliveAgent,
+  timeout: 15000,
 });
 
 /**
@@ -49,6 +58,8 @@ async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
 
     const fileResponse = await axios.get(photoUrl, {
       responseType: "arraybuffer",
+      httpsAgent: keepAliveAgent,
+      timeout: 30000,
     });
 
     const form = new FormData();
@@ -58,7 +69,10 @@ async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
       "photo.jpg",
     );
 
-    const uploaded = await axios.post(uploadUrl, form);
+    const uploaded = await axios.post(uploadUrl, form, {
+      httpsAgent: keepAliveAgent,
+      timeout: 30000,
+    });
     const token = uploaded.data?.photos
       ? Object.values(uploaded.data.photos)[0]?.token
       : uploaded.data?.token;
@@ -87,7 +101,11 @@ async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
  */
 async function maxDownloadAttachment(url) {
   try {
-    const response = await axios.get(url, { responseType: "arraybuffer" });
+    const response = await axios.get(url, {
+      responseType: "arraybuffer",
+      httpsAgent: keepAliveAgent,
+      timeout: 30000,
+    });
     return Buffer.from(response.data);
   } catch (err) {
     console.log("max download attachment error:", err.message);

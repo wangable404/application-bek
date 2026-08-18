@@ -25,16 +25,21 @@ async function open(chatId, user, applicationId) {
     return `${who}: ${m.text}`;
   });
 
+  const intro =
+    "💬 Менеджер скоро подключится к чату.\n" +
+    "Чтобы выйти из чата, напишите «выйти».";
+
   const text = history.length
-    ? `💬 Чат по заявке.\n\n${history.join("\n")}\n\nПишите сообщения текстом — они уйдут менеджеру.`
-    : "💬 Чат по заявке пуст. Напишите сообщение — оно уйдёт менеджеру.";
+    ? `${intro}\n\n${history.join("\n")}`
+    : intro;
 
   await maxSendMessage(chatId, text, chatExitKeyboard());
 }
 
 async function forward(chatId, user, session, text) {
+  // Без "✓"-подтверждения — дальше это просто переписка, лишний ответ
+  // бота на каждую реплику только мешает.
   await internalApi.sendChatMessage(user, session.data.applicationId, text);
-  await maxSendMessage(chatId, "✓", chatExitKeyboard());
 }
 
 async function exit(chatId, user, session) {

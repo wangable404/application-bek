@@ -9,7 +9,6 @@ const { MaxChat, User } = require("../../models/model");
 const { verifyBindToken } = require("../../utils/maxBindToken");
 const { maxSendMessage, maxAnswerCallback } = require("../../services/max.service");
 const { getSession, resetSession } = require("./session");
-const { mainMenuKeyboard } = require("./keyboards");
 
 const menu = require("./scenarios/menu");
 const applications = require("./scenarios/applications");
@@ -78,8 +77,12 @@ async function handleCallback(update) {
   const callbackId = update.callback?.callback_id;
   const payload = update.callback?.payload || "";
 
+  // Не ждём ответа MAX на answerCallback (это просто снимает "часики" с
+  // кнопки) — он не влияет на дальнейшую логику, а ждать его синхронно
+  // означало добавлять ещё один внешний round-trip к каждому нажатию,
+  // даже для кнопок вроде "Пропустить", которые вообще не ходят в БД.
   if (callbackId) {
-    await maxAnswerCallback(callbackId);
+    maxAnswerCallback(callbackId);
   }
 
   const user = await resolveUser(chatId);
@@ -89,7 +92,7 @@ async function handleCallback(update) {
     await routeCallback(chatId, user, payload);
   } catch (err) {
     console.log("max bot callback error:", err.response?.data || err.message);
-    await maxSendMessage(chatId, "⚠️ Что-то пошло не так, попробуйте ещё раз.", mainMenuKeyboard());
+    await maxSendMessage(chatId, friendlyErrorText(err));
   }
 }
 
@@ -149,11 +152,17 @@ async function routeCallback(chatId, user, payload) {
       case "add_equipment":
         return completeWork.addEquipment(chatId);
       case "equipment_done":
-        return completeWork.equipmentDone(chatId);
+        return completeWork.equipmentDone(chatId, session);
       case "skip_imei":
         return completeWork.skipImei(chatId, session);
       case "skip_imei_photo":
         return completeWork.skipImeiPhoto(chatId, session);
+      case "car_more_yes":
+        return completeWork.addAnotherCar(chatId, session);
+      case "car_more_no":
+        return completeWork.finishCars(chatId, session);
+      case "add_more_car":
+        return completeWork.addAnotherCar(chatId, session);
       case "skip_additional":
         return completeWork.skipAdditionalWork(chatId);
       case "act_yes":
@@ -163,7 +172,11 @@ async function routeCallback(chatId, user, payload) {
       case "submit":
         return completeWork.submit(chatId, user, session);
       case "restart":
+        return completeWork.confirmRestart(chatId);
+      case "restart_yes":
         return completeWork.restart(chatId, session);
+      case "restart_no":
+        return completeWork.showSummary(chatId, session.data);
     }
     return;
   }
@@ -197,6 +210,9 @@ async function handleMessage(update) {
     }
 
     if (session.scenario === "chat") {
+      if (text && text.trim().toLowerCase() === "выйти") {
+        return await chat.exit(chatId, user, session);
+      }
       if (text) return await chat.forward(chatId, user, session, text);
       return;
     }
@@ -227,8 +243,19 @@ async function handleMessage(update) {
     await menu.showRoot(chatId);
   } catch (err) {
     console.log("max bot message error:", err.response?.data || err.message);
-    await maxSendMessage(chatId, "⚠️ Что-то пошло не так, попробуйте ещё раз.", mainMenuKeyboard());
+    await maxSendMessage(chatId, friendlyErrorText(err));
   }
+}
+
+// Бэкенд обычно уже кладёт понятную причину в err.response.data.message
+// (ApiError) — показываем её вместо немого "попробуйте ещё раз", иначе
+// пользователь просто зацикливается на одной и той же ошибке. Кнопку
+// меню сюда специально не добавляем — на любом шаге доступна "Отмена".
+function friendlyErrorText(err) {
+  const backendMessage = err?.response?.data?.message;
+  return backendMessage
+    ? `⚠️ ${backendMessage}`
+    : "⚠️ Что-то пошло не так, попробуйте ещё раз.";
 }
 
 async function hint(chatId) {
