@@ -44,13 +44,33 @@ async function postWithRetry(path, body, config, attempts = 2) {
   throw lastErr;
 }
 
+// Реплики менеджера доставляются в MAX через notifyChatMessage, которая
+// не ждёт своего завершения (чтобы не задерживать ответ отправителю) —
+// значит несколько сообщений подряд могут реально уйти в сеть почти
+// одновременно, и с ретраями (см. postWithRetry) более раннее сообщение
+// иногда долетает ПОЗЖЕ более позднего. Чтобы в один и тот же MAX-чат
+// сообщения приходили строго в том порядке, в котором их поставили в
+// очередь — а не в том, в котором успели исполниться сетевые запросы —
+// сериализуем отправку по chatId.
+const sendQueues = new Map();
+
 /**
  * Отправить текстовое сообщение, опционально с инлайн-клавиатурой.
  * @param {string|number} chatId
  * @param {string} text
  * @param {object} [keyboard] - результат keyboards.js (attachments-объект inline_keyboard)
  */
-async function maxSendMessage(chatId, text, keyboard) {
+function maxSendMessage(chatId, text, keyboard) {
+  const key = String(chatId);
+  const prev = sendQueues.get(key) || Promise.resolve();
+
+  const run = prev.then(() => doSendMessage(chatId, text, keyboard));
+  sendQueues.set(key, run.catch(() => {}));
+
+  return run;
+}
+
+async function doSendMessage(chatId, text, keyboard) {
   try {
     const attachments = keyboard ? [keyboard] : undefined;
     const response = await postWithRetry(
