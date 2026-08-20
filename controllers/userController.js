@@ -472,7 +472,7 @@ class UserController {
       const existing = await Invitation.findOne({
         where: { userId, companyId: user.id },
       });
-      if (existing) {
+      if (existing && (existing.approved || existing.rejected)) {
         return next(ApiError.badRequest("Пользователь уже приглашён"));
       }
 
