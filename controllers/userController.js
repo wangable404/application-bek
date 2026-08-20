@@ -458,33 +458,45 @@ class UserController {
         );
       }
 
-      const activeInvites = await Invitation.count({
-        where: { companyId: user.id },
-      });
-      const company = await User.findByPk(user.id, {
-        include: [{ model: Plan }],
-      });
-
-      if (activeInvites >= company.plan.maxIntegrators) {
-        return next(ApiError.badRequest("Превышено количество приглашений"));
-      }
-
       const existing = await Invitation.findOne({
         where: { userId, companyId: user.id },
       });
-      if (existing && (existing.approved || existing.rejected)) {
-        return next(ApiError.badRequest("Пользователь уже приглашён"));
+
+      if (existing && !existing.rejected) {
+        return next(
+          ApiError.badRequest(
+            existing.approved
+              ? "Пользователь уже в компании"
+              : "Пользователь уже приглашён",
+          ),
+        );
       }
 
-      const invitation = await Invitation.create({
-        userId,
-        companyId: user.id,
-      });
+      if (!existing) {
+        const activeInvites = await Invitation.count({
+          where: { companyId: user.id, rejected: false },
+        });
+        const company = await User.findByPk(user.id, {
+          include: [{ model: Plan }],
+        });
 
-      const tokens = await PushToken.findAll({
-        where: { userId },
-        attributes: ["token"],
-      });
+        if (activeInvites >= company.plan.maxIntegrators) {
+          return next(ApiError.badRequest("Превышено количество приглашений"));
+        }
+      }
+
+      let invitation;
+      if (existing) {
+        existing.approved = false;
+        existing.rejected = false;
+        await existing.save();
+        invitation = existing;
+      } else {
+        invitation = await Invitation.create({
+          userId,
+          companyId: user.id,
+        });
+      }
 
       await notifyUser(
           userId,
