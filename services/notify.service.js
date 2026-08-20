@@ -13,8 +13,6 @@ async function notifyUser(userId, title, body, data = {}) {
 
   const maxText = `${title}\n${body}`;
 
-  // allSettled, не all: один упавший канал (например, временный сбой MAX)
-  // не должен помешать доставить push, и наоборот.
   await Promise.allSettled([
     sendPush(
       tokens.map((t) => t.token),

@@ -12,6 +12,7 @@ const bcrypt = require("bcrypt");
 const uuid = require("uuid");
 const { generateJwt } = require("../utils/jwt");
 const { generateBindToken } = require("../utils/maxBindToken");
+const { notifyUser } = require("../services/notify.service");
 
 class UserController {
   async create(req, res, next) {
