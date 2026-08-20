@@ -11,6 +11,7 @@ const { maxSendMessage, maxAnswerCallback } = require("../../services/max.servic
 const { getSession, resetSession } = require("./session");
 
 const menu = require("./scenarios/menu");
+const companies = require("./scenarios/companies");
 const applications = require("./scenarios/applications");
 const startWork = require("./scenarios/startWork");
 const completeWork = require("./scenarios/completeWork");
@@ -24,7 +25,13 @@ async function resolveUser(chatId) {
     where: { chatId: String(chatId) },
     include: [{ model: User }],
   });
-  return maxChat?.user || null;
+  if (!maxChat?.user) return null;
+
+  // Компания, выбранная интегратором для работы в боте (аналог company
+  // из AuthContext в приложении) — вешаем прямо на user, чтобы не тащить
+  // maxChat отдельным параметром через все сценарии.
+  maxChat.user.maxCompanyId = maxChat.companyId;
+  return maxChat.user;
 }
 
 // TODO: убрать после того, как вживую сверим реальный формат апдейтов MAX
@@ -100,25 +107,61 @@ async function handleCallback(update) {
   }
 }
 
+// Без выбранной компании работать с заявками нельзя — так же, как
+// приложение не показывает список заявок, пока не выбрана компания на
+// главном экране (application-app/app/(tabs)/index.tsx).
+function requiresCompany(ns, action) {
+  if (ns === "app" || ns === "work") return true;
+  if (ns === "chat" && action === "open") return true;
+  return false;
+}
+
+async function routeToApplicationsOrGate(chatId, user) {
+  if (!user.maxCompanyId) {
+    return companies.promptSelect(chatId, user);
+  }
+  return applications.listApplications(chatId, user);
+}
+
 async function routeCallback(chatId, user, payload) {
   const [ns, action, arg] = payload.split(":");
   const session = await getSession(chatId, user.id);
 
   if (payload === "scenario:cancel") {
     await resetSession(chatId);
-    return applications.listApplications(chatId, user);
+    return routeToApplicationsOrGate(chatId, user);
   }
 
   if (ns === "menu") {
     switch (action) {
       case "root":
-        return menu.showRoot(chatId);
+        return menu.showRoot(chatId, user);
       case "applications":
-        return applications.listApplications(chatId, user);
+        return routeToApplicationsOrGate(chatId, user);
       case "help":
-        return menu.showHelp(chatId);
+        return menu.showHelp(chatId, user);
     }
     return;
+  }
+
+  if (ns === "company") {
+    switch (action) {
+      case "menu":
+        return companies.showMenu(chatId, user);
+      case "select":
+        return companies.selectCompany(chatId, user, arg);
+      case "invites":
+        return companies.showInvitations(chatId, user);
+      case "accept":
+        return companies.respondInvite(chatId, user, arg, true);
+      case "reject":
+        return companies.respondInvite(chatId, user, arg, false);
+    }
+    return;
+  }
+
+  if (requiresCompany(ns, action) && !user.maxCompanyId) {
+    return companies.promptSelect(chatId, user);
   }
 
   if (ns === "app") {
@@ -239,12 +282,15 @@ async function handleMessage(update) {
       return await hint(chatId);
     }
 
-    // idle — свободный текст не ожидается, подсказываем меню
+    // idle — свободный текст не ожидается, кроме пары именных команд
     const lower = text.toLowerCase();
     if (lower === "помощь") {
-      return await menu.showHelp(chatId);
+      return await menu.showHelp(chatId, user);
     }
-    await menu.showRoot(chatId);
+    if (lower === "компании" || lower === "компания") {
+      return await companies.showMenu(chatId, user);
+    }
+    await menu.showRoot(chatId, user);
   } catch (err) {
     console.log("max bot message error:", err.response?.data || err.message);
     await maxSendMessage(chatId, friendlyErrorText(err));

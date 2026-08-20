@@ -27,9 +27,29 @@ function client(user) {
   });
 }
 
-async function getApplications(user) {
+async function getApplications(user, companyId) {
   const { data } = await client(user).get("/application/", {
-    params: { userId: user.id },
+    params: { userId: user.id, companyId },
+  });
+  return data;
+}
+
+// Компании, к которым интегратор уже принят (approved: true у Invitation).
+async function getCompanies(user) {
+  const { data } = await client(user).get("/user/invite/companies");
+  return data;
+}
+
+// Все приглашения интегратора (принятые/отклонённые/ожидающие вперемешку —
+// фильтруем на стороне бота, как это делает и мобильное приложение).
+async function getInvitations(user) {
+  const { data } = await client(user).get("/user/invite");
+  return data;
+}
+
+async function respondInvitation(user, invitationId, approved) {
+  const { data } = await client(user).patch(`/user/invite/${invitationId}`, {
+    [approved ? "approved" : "rejected"]: true,
   });
   return data;
 }
@@ -112,6 +132,9 @@ async function markChatRead(user, chatId) {
 
 module.exports = {
   getApplications,
+  getCompanies,
+  getInvitations,
+  respondInvitation,
   changeStatus,
   startWork,
   completeApplication,

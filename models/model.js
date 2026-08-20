@@ -106,6 +106,18 @@ const MaxChat = sequelize.define("max_chat", {
     unique: true,
   },
   chatId: { type: DataTypes.STRING, allowNull: false },
+  // Компания, под которой интегратор сейчас работает в боте — аналог
+  // company/setCompany в приложении (там хранится на устройстве,
+  // AsyncStorage). Пока не выбрана — бот не показывает заявки, как и
+  // приложение не показывает их без выбранной компании на главном экране.
+  companyId: {
+    type: DataTypes.UUID,
+    references: {
+      model: User,
+      key: "id",
+    },
+    allowNull: true,
+  },
 });
 
 // Состояние диалога (FSM) MAX-бота: на каком шаге какого сценария

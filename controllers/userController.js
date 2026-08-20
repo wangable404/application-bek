@@ -290,6 +290,25 @@ class UserController {
       next(ApiError.badRequest(err.message));
     }
   }
+  // Статус привязки MAX и свежая ссылка для (пере)подключения — используется
+  // в профиле приложения, чтобы можно было сменить подключённый MAX-аккаунт
+  // без повторного ввода email/пароля (в отличие от login(), где эта же
+  // ссылка выдаётся как часть входа). MaxChat.userId уникален (см.
+  // models/model.js), поэтому переход по новой ссылке с другого MAX-аккаунта
+  // просто перепривязывает существующую запись, а не плодит дубликаты.
+  async getMaxConnection(req, res, next) {
+    try {
+      const userId = req.user.id;
+      const maxChat = await MaxChat.findOne({ where: { userId } });
+
+      return res.json({
+        maxConnected: !!maxChat,
+        maxLink: `https://max.ru/${process.env.MAX_BOT_USERNAME}?start=${await generateBindToken(userId)}`,
+      });
+    } catch (err) {
+      next(ApiError.badRequest(err.message));
+    }
+  }
   async getAll(req, res, next) {
     try {
       const users = await User.findAll({

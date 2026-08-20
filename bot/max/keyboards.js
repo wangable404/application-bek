@@ -27,8 +27,17 @@ function linkButton(text, url) {
 // чата — так же, как в application-app/app/modal.tsx. Отдельных
 // верхнеуровневых кнопок "Начать работу"/"Завершить работу"/"Чат" нет,
 // чтобы не путать пользователя, к какой заявке они относятся.
-const mainMenuKeyboard = () =>
-  inlineKeyboard([[callbackButton("📋 Все заявки", "menu:applications")]]);
+//
+// Без выбранной компании (как и в приложении — там это обязательный шаг
+// на главном экране) работать с заявками нельзя, поэтому вместо
+// "Все заявки" показываем только выбор компании.
+const mainMenuKeyboard = (hasCompany) =>
+  hasCompany
+    ? inlineKeyboard([
+        [callbackButton("📋 Все заявки", "menu:applications")],
+        [callbackButton("🏢 Сменить компанию", "company:menu")],
+      ])
+    : inlineKeyboard([[callbackButton("🏢 Выбрать компанию", "company:menu")]]);
 
 const backToMenuKeyboard = () =>
   inlineKeyboard([[callbackButton("⬅️ В меню", "menu:root")]]);
@@ -73,14 +82,12 @@ const applicationCardKeyboard = (app) => {
   return inlineKeyboard(rows);
 };
 
-// Для многошагового накопления (фото авто): "Готово" завершает сбор.
 const doneKeyboard = (donePayload) =>
   inlineKeyboard([
     [callbackButton("✅ Готово", donePayload)],
     [callbackButton("✖️ Отмена", "scenario:cancel")],
   ]);
 
-// Для одиночного необязательного текстового поля: одна кнопка "Пропустить".
 const skipKeyboard = (skipPayload) =>
   inlineKeyboard([
     [callbackButton("⏭️ Пропустить", skipPayload)],
@@ -119,6 +126,39 @@ const carMoreKeyboard = () =>
 const chatExitKeyboard = () =>
   inlineKeyboard([[callbackButton("🚪 Выйти из чата", "chat:exit")]]);
 
+// Компании, к которым интегратор уже принят — выбор "текущей" (аналог
+// setCompany в приложении). currentCompanyId подсвечивать нечем в чате
+// (кнопки не умеют "активное" состояние), поэтому просто помечаем текст.
+const companiesListKeyboard = (companies, currentCompanyId, pendingCount) => {
+  const rows = companies.map((c) => [
+    callbackButton(
+      `${c.id === currentCompanyId ? "✅ " : ""}${c.firstName || ""} ${c.lastName || ""}`.trim(),
+      `company:select:${c.id}`,
+    ),
+  ]);
+
+  rows.push([
+    callbackButton(
+      pendingCount > 0 ? `✉️ Приглашения (${pendingCount})` : "✉️ Приглашения",
+      "company:invites",
+    ),
+  ]);
+  rows.push([callbackButton("⬅️ В меню", "menu:root")]);
+
+  return inlineKeyboard(rows);
+};
+
+const invitationCardKeyboard = (invitation) =>
+  inlineKeyboard([
+    [
+      callbackButton("✅ Принять", `company:accept:${invitation.id}`),
+      callbackButton("❌ Отклонить", `company:reject:${invitation.id}`),
+    ],
+  ]);
+
+const backToCompaniesKeyboard = () =>
+  inlineKeyboard([[callbackButton("⬅️ К компаниям", "company:menu")]]);
+
 function statusLabel(status) {
   const labels = {
     pending: "новая",
@@ -148,5 +188,8 @@ module.exports = {
   restartConfirmKeyboard,
   carMoreKeyboard,
   chatExitKeyboard,
+  companiesListKeyboard,
+  invitationCardKeyboard,
+  backToCompaniesKeyboard,
   statusLabel,
 };

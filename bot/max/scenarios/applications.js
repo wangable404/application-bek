@@ -9,7 +9,7 @@ const {
 } = require("../keyboards");
 
 async function listApplications(chatId, user) {
-  const applications = await internalApi.getApplications(user);
+  const applications = await internalApi.getApplications(user, user.maxCompanyId);
 
   if (!applications.length) {
     await maxSendMessage(chatId, "У вас пока нет заявок.", backToMenuKeyboard());
@@ -41,7 +41,7 @@ function formatCard(app) {
 }
 
 async function findApplication(user, applicationId) {
-  const applications = await internalApi.getApplications(user);
+  const applications = await internalApi.getApplications(user, user.maxCompanyId);
   return applications.find((a) => String(a.id) === String(applicationId));
 }
 
