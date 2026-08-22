@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: "application-bek",
+    name: "A",
     script: "./index.js",
     cwd: "C:\\Users\\webuser\\Desktop\\application-bek",
     env: {
