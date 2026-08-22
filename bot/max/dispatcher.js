@@ -104,22 +104,19 @@ async function handleBotStarted(update) {
   await menu.showWelcome(chatId);
 }
 
-// Полностью переносит MAX-чат на нового пользователя. Вместо
-// destroy+upsert — простой DELETE (по userId) + UPDATE (по chatId) в одной
-// транзакции: физическая строка для этого chatId переиспользуется и просто
-// меняет владельца, а не пересоздаётся через ON CONFLICT, так что нет
-// зависимости от того, какой именно unique-индекс Sequelize подставит в
-// ON CONFLICT. companyId сбрасываем — это был выбор прежнего владельца,
-// новому его подставлять нельзя.
+// Полностью переносит MAX-чат на нового пользователя: удаляет ВСЕ строки,
+// которые могут столкнуться с новой привязкой (и по chatId, и по userId —
+// например, если для этого chatId ещё с тех пор, когда он не был защищён
+// от повторной привязки, успело накопиться несколько дублирующихся строк
+// на разных пользователей — DB_SYNC=false, поэтому unique(chatId) в схеме
+// на реальную БД так и не накатился), и создаёт одну свежую строку.
+// Специально не UPDATE/upsert "на месте" — так результат не зависит от
+// того, сколько именно строк реально совпадёт по chatId.
 async function rebindMaxChat(chatId, userId) {
   await sequelize.transaction(async (t) => {
-    // Если у нового владельца уже была своя привязка к другому MAX-чату —
-    // убираем её первой, иначе она столкнётся с unique(userId) на шаге ниже.
+    await MaxChat.destroy({ where: { chatId }, transaction: t });
     await MaxChat.destroy({ where: { userId }, transaction: t });
-    await MaxChat.update(
-      { userId, companyId: null },
-      { where: { chatId }, transaction: t },
-    );
+    await MaxChat.create({ userId, chatId, companyId: null }, { transaction: t });
   });
 }
 
@@ -161,7 +158,10 @@ async function handleBindDecision(chatId, action) {
     try {
       await rebindMaxChat(chatId, pendingUserId);
     } catch (err) {
-      console.log("max bind confirm error:", err.response?.data || err.message || err);
+      console.log(
+        "max bind confirm error:",
+        err.original?.message || err.response?.data || err.message || err,
+      );
       await maxSendMessage(
         chatId,
         "⚠️ Не удалось переподключить аккаунт, попробуйте ещё раз.",
@@ -198,7 +198,10 @@ async function handleCallback(update) {
     try {
       return await handleBindDecision(chatId, bindAction);
     } catch (err) {
-      console.log("max bind decision error:", err.response?.data || err.message || err);
+      console.log(
+        "max bind decision error:",
+        err.original?.message || err.response?.data || err.message || err,
+      );
       await maxSendMessage(chatId, friendlyErrorText(err));
       return;
     }
