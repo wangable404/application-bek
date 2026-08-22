@@ -104,15 +104,22 @@ async function handleBotStarted(update) {
   await menu.showWelcome(chatId);
 }
 
-// Полностью переносит MAX-чат на нового пользователя: удаляет прежнюю
-// привязку этого chatId (к другому интегратору) и заводит/обновляет
-// привязку для нового — одной транзакцией, чтобы между этими двумя
-// операциями не было окна, где chatId остаётся привязан к обоим
-// пользователям одновременно или не привязан ни к одному.
+// Полностью переносит MAX-чат на нового пользователя. Вместо
+// destroy+upsert — простой DELETE (по userId) + UPDATE (по chatId) в одной
+// транзакции: физическая строка для этого chatId переиспользуется и просто
+// меняет владельца, а не пересоздаётся через ON CONFLICT, так что нет
+// зависимости от того, какой именно unique-индекс Sequelize подставит в
+// ON CONFLICT. companyId сбрасываем — это был выбор прежнего владельца,
+// новому его подставлять нельзя.
 async function rebindMaxChat(chatId, userId) {
   await sequelize.transaction(async (t) => {
-    await MaxChat.destroy({ where: { chatId }, transaction: t });
-    await MaxChat.upsert({ userId, chatId }, { transaction: t });
+    // Если у нового владельца уже была своя привязка к другому MAX-чату —
+    // убираем её первой, иначе она столкнётся с unique(userId) на шаге ниже.
+    await MaxChat.destroy({ where: { userId }, transaction: t });
+    await MaxChat.update(
+      { userId, companyId: null },
+      { where: { chatId }, transaction: t },
+    );
   });
 }
 
@@ -132,15 +139,36 @@ async function handleBindDecision(chatId, action) {
     return;
   }
 
+  // Атомарно "захватываем" это решение через условие scenario = 'rebind_confirm'
+  // прямо в WHERE — не отдельным SELECT, а потом UPDATE. MAX иногда дублирует
+  // доставку одного и того же клика (например, когда наш ответ на
+  // answerCallback не прошёл — "Can't deserialize body" в логах), и если оба
+  // экземпляра события придут почти одновременно, сценарий сменить и правда
+  // переподключить аккаунт сможет только один из них — у второго это условие
+  // в WHERE уже ничего не найдёт, и он тихо выйдет ниже.
+  const [claimed] = await MaxBotSession.update(
+    { scenario: "idle", step: null, applicationId: null, data: {} },
+    { where: { chatId, scenario: "rebind_confirm" } },
+  );
+  if (!claimed) return;
+
   if (action === "cancel") {
-    await resetSession(chatId);
     await maxSendMessage(chatId, "Отменено. Прежнее подключение MAX не изменено.");
     return;
   }
 
   if (action === "confirm") {
-    await rebindMaxChat(chatId, pendingUserId);
-    await resetSession(chatId);
+    try {
+      await rebindMaxChat(chatId, pendingUserId);
+    } catch (err) {
+      console.log("max bind confirm error:", err.response?.data || err.message || err);
+      await maxSendMessage(
+        chatId,
+        "⚠️ Не удалось переподключить аккаунт, попробуйте ещё раз.",
+      );
+      return;
+    }
+
     const user = await resolveUser(chatId);
     await menu.showWelcome(chatId, user);
   }
@@ -167,7 +195,13 @@ async function handleCallback(update) {
 
   const [bindNs, bindAction] = payload.split(":");
   if (bindNs === "bind") {
-    return handleBindDecision(chatId, bindAction);
+    try {
+      return await handleBindDecision(chatId, bindAction);
+    } catch (err) {
+      console.log("max bind decision error:", err.response?.data || err.message || err);
+      await maxSendMessage(chatId, friendlyErrorText(err));
+      return;
+    }
   }
 
   const user = await resolveUser(chatId);
