@@ -100,6 +100,17 @@ const yesNoKeyboard = (yesPayload, noPayload) =>
     [callbackButton("✖️ Отмена", "scenario:cancel")],
   ]);
 
+// Подтверждение переподключения MAX-аккаунта, уже привязанного к другому
+// интегратору. Отдельная клавиатура (не yesNoKeyboard) — её "Отмена" не
+// должна идти через scenario:cancel/routeCallback: до подтверждения
+// пользователь ещё не привязан к боту как валидный user, поэтому решение
+// разбирается отдельной веткой в dispatcher.js (ns === "bind").
+const rebindConfirmKeyboard = () =>
+  inlineKeyboard([
+    [callbackButton("✅ Да, переподключить", "bind:confirm")],
+    [callbackButton("✖️ Отмена", "bind:cancel")],
+  ]);
+
 const completeWorkSummaryKeyboard = () =>
   inlineKeyboard([
     [callbackButton("📤 Отправить", "complete:submit")],
@@ -184,6 +195,7 @@ module.exports = {
   doneKeyboard,
   skipKeyboard,
   yesNoKeyboard,
+  rebindConfirmKeyboard,
   completeWorkSummaryKeyboard,
   restartConfirmKeyboard,
   carMoreKeyboard,

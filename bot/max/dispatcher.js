@@ -5,10 +5,12 @@
 // не заменить (дата, комментарий, IMEI, сообщения в чате), чтобы бот и
 // мобильное приложение не путали пользователя двумя разными способами
 // делать одно и то же.
-const { MaxChat, User } = require("../../models/model");
+const { MaxChat, MaxBotSession, User } = require("../../models/model");
+const sequelize = require("../../db");
 const { verifyBindToken } = require("../../utils/maxBindToken");
 const { maxSendMessage, maxAnswerCallback } = require("../../services/max.service");
-const { getSession, resetSession } = require("./session");
+const { getSession, setScenario, resetSession } = require("./session");
+const { rebindConfirmKeyboard } = require("./keyboards");
 
 const menu = require("./scenarios/menu");
 const companies = require("./scenarios/companies");
@@ -73,8 +75,75 @@ async function handleBotStarted(update) {
     return;
   }
 
+  const existing = await MaxChat.findOne({ where: { chatId } });
+
+  // Этот же MAX-чат уже привязан к другому интегратору. chatId не
+  // уникален на уровне БД (уникален только userId — один интегратор не
+  // может держать сразу два MAX-аккаунта), поэтому единственная защита
+  // от того, чтобы один MAX-аккаунт оказался привязан сразу к двум
+  // интеграторам — явное подтверждение здесь перед переносом привязки.
+  if (existing && existing.userId !== userId) {
+    await getSession(chatId, userId);
+    await setScenario(chatId, "rebind_confirm", null, {
+      data: { pendingUserId: userId },
+    });
+
+    const nextUser = await User.findByPk(userId);
+    await maxSendMessage(
+      chatId,
+      "⚠️ Этот MAX-аккаунт уже подключён к другому аккаунту интегратора.\n\n" +
+        `Подключить его к аккаунту${nextUser?.email ? ` ${nextUser.email}` : ""} ` +
+        "вместо прежнего? Прежнее подключение будет удалено полностью.",
+      rebindConfirmKeyboard(),
+    );
+    return;
+  }
+
   await MaxChat.upsert({ userId, chatId });
+  await resetSession(chatId);
   await menu.showWelcome(chatId);
+}
+
+// Полностью переносит MAX-чат на нового пользователя: удаляет прежнюю
+// привязку этого chatId (к другому интегратору) и заводит/обновляет
+// привязку для нового — одной транзакцией, чтобы между этими двумя
+// операциями не было окна, где chatId остаётся привязан к обоим
+// пользователям одновременно или не привязан ни к одному.
+async function rebindMaxChat(chatId, userId) {
+  await sequelize.transaction(async (t) => {
+    await MaxChat.destroy({ where: { chatId }, transaction: t });
+    await MaxChat.upsert({ userId, chatId }, { transaction: t });
+  });
+}
+
+// Решение "переподключить / отменить" по конфликту из handleBotStarted.
+// Отдельная ветка (не routeCallback): пока подтверждения нет, chatId
+// формально ещё привязан к прежнему пользователю, и resolveUser(chatId)
+// вернул бы именно его — обрабатывать эти кнопки через обычный маршрут
+// с "чужим" user было бы неправильно.
+async function handleBindDecision(chatId, action) {
+  const session = await MaxBotSession.findOne({ where: { chatId } });
+  const pendingUserId =
+    session?.scenario === "rebind_confirm" ? session.data?.pendingUserId : null;
+
+  if (!pendingUserId) {
+    // Кнопка нажата повторно после того, как решение уже принято
+    // (или сессия истекла) — просто игнорируем, не пугаем ошибкой.
+    return;
+  }
+
+  if (action === "cancel") {
+    await resetSession(chatId);
+    await maxSendMessage(chatId, "Отменено. Прежнее подключение MAX не изменено.");
+    return;
+  }
+
+  if (action === "confirm") {
+    await rebindMaxChat(chatId, pendingUserId);
+    await resetSession(chatId);
+    const user = await resolveUser(chatId);
+    await menu.showWelcome(chatId, user);
+  }
 }
 
 async function handleCallback(update) {
@@ -94,6 +163,11 @@ async function handleCallback(update) {
   // даже для кнопок вроде "Пропустить", которые вообще не ходят в БД.
   if (callbackId) {
     maxAnswerCallback(callbackId);
+  }
+
+  const [bindNs, bindAction] = payload.split(":");
+  if (bindNs === "bind") {
+    return handleBindDecision(chatId, bindAction);
   }
 
   const user = await resolveUser(chatId);

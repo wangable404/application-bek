@@ -105,7 +105,12 @@ const MaxChat = sequelize.define("max_chat", {
     allowNull: false,
     unique: true,
   },
-  chatId: { type: DataTypes.STRING, allowNull: false },
+  // unique — один MAX-аккаунт (chatId) не должен быть привязан больше чем
+  // к одному интегратору. sequelize.sync() без alter не накатит этот
+  // constraint на уже существующую таблицу — реальную защиту от дублей
+  // на проде даёт логика переподключения в bot/max/dispatcher.js
+  // (handleBotStarted/rebindMaxChat), это лишь страховка для новых окружений.
+  chatId: { type: DataTypes.STRING, allowNull: false, unique: true },
   // Компания, под которой интегратор сейчас работает в боте — аналог
   // company/setCompany в приложении (там хранится на устройстве,
   // AsyncStorage). Пока не выбрана — бот не показывает заявки, как и
