@@ -6,7 +6,7 @@
 // dispatcher.js (getSession уже вызывался, чтобы понять сценарий) — эти
 // функции обновляют его напрямую (session.update), а не через
 // session.js-хелперы, которые бы заново перезапрашивали ту же запись.
-const { maxSendMessage } = require("../../../services/max.service");
+const { maxSendMessage, maxDownloadAttachment } = require("../../../services/max.service");
 const internalApi = require("../internalApi");
 const { chatExitKeyboard } = require("../keyboards");
 const { showCard } = require("./applications");
@@ -42,6 +42,29 @@ async function forward(chatId, user, session, text) {
   await internalApi.sendChatMessage(user, session.data.applicationId, text);
 }
 
+// Фото/видео, присланное интегратором прямо в чат бота — скачиваем у MAX
+// и заливаем на бэкенд тем же путём, что и текст, чтобы оно попало в
+// общую историю чата (видно и в приложении, и в админке).
+async function forwardAttachment(chatId, user, session, attachment, caption) {
+  const isVideo = attachment.type === "video";
+  const buffer = await maxDownloadAttachment(attachment.payload?.url);
+
+  if (!buffer) {
+    await maxSendMessage(chatId, "⚠️ Не удалось загрузить файл, попробуйте ещё раз.");
+    return;
+  }
+
+  const filename = `${isVideo ? "video" : "photo"}_${Date.now()}${isVideo ? ".mp4" : ".jpg"}`;
+  const mimeType = isVideo ? "video/mp4" : "image/jpeg";
+
+  await internalApi.sendChatAttachment(
+    user,
+    session.data.applicationId,
+    { buffer, filename, mimeType },
+    caption,
+  );
+}
+
 async function exit(chatId, user, session) {
   const applicationId = session.data.applicationId;
   await Promise.all([
@@ -51,4 +74,4 @@ async function exit(chatId, user, session) {
   await showCard(chatId, user, applicationId);
 }
 
-module.exports = { open, forward, exit };
+module.exports = { open, forward, forwardAttachment, exit };

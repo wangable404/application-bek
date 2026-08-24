@@ -125,6 +125,26 @@ async function sendChatMessage(user, applicationId, text) {
   return data;
 }
 
+/**
+ * @param {{buffer: Buffer, filename: string, mimeType: string}} attachment
+ * @param {string} [caption]
+ */
+async function sendChatAttachment(user, applicationId, attachment, caption) {
+  const form = new FormData();
+  if (caption) form.append("text", caption);
+  form.append(
+    "attachment",
+    new Blob([attachment.buffer], { type: attachment.mimeType }),
+    attachment.filename,
+  );
+
+  const { data } = await client(user).post(
+    `/chats/${applicationId}/chat/message`,
+    form,
+  );
+  return data;
+}
+
 async function markChatRead(user, chatId) {
   const { data } = await client(user).patch(`/chats/${chatId}/read`);
   return data;
@@ -140,5 +160,6 @@ module.exports = {
   completeApplication,
   getChat,
   sendChatMessage,
+  sendChatAttachment,
   markChatRead,
 };

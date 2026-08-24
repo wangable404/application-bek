@@ -1,5 +1,5 @@
 // services/notify.service.js
-const { maxSendMessage } = require("./max.service");
+const { maxSendMessage, maxSendAttachment } = require("./max.service");
 const { PushToken, MaxChat, MaxBotSession } = require("../models/model");
 const { sendPush } = require("./push.service");
 
@@ -30,17 +30,26 @@ async function notifyUser(userId, title, body, data = {}) {
 // теме. Поэтому в MAX реплика уходит только пока пользователь реально
 // держит открытым бот-чат именно по этой заявке — в остальных случаях
 // он всё равно узнает про сообщение через push.
-async function notifyChatMessage(userId, applicationId, text) {
+// message: { text, type: "text"|"image"|"video", fileBuffer?, fileName?, mimeType? }
+// text по-прежнему принимается и как обычная строка — для обратной
+// совместимости с местами, где вложений не бывает.
+async function notifyChatMessage(userId, applicationId, message) {
+  const { text, type, fileBuffer, fileName, mimeType } =
+    typeof message === "string" ? { text: message, type: "text" } : message;
+
   const [tokens, maxChat] = await Promise.all([
     PushToken.findAll({ where: { userId }, attributes: ["token"] }),
     MaxChat.findOne({ where: { userId }, attributes: ["chatId"] }),
   ]);
 
+  const pushBody =
+    text || (type === "video" ? "🎥 Видео" : type === "image" ? "📷 Фото" : "");
+
   const tasks = [
     sendPush(
       tokens.map((t) => t.token),
       "Новое сообщение",
-      text,
+      pushBody,
       { screen: "/(tabs)/applications" },
     ),
   ];
@@ -55,7 +64,13 @@ async function notifyChatMessage(userId, applicationId, text) {
         String(session.applicationId) === String(applicationId);
 
       if (isOpenInThisChat) {
-        tasks.push(maxSendMessage(maxChat.chatId, text));
+        if (fileBuffer) {
+          tasks.push(
+            maxSendAttachment(maxChat.chatId, fileBuffer, fileName, mimeType, text),
+          );
+        } else {
+          tasks.push(maxSendMessage(maxChat.chatId, text));
+        }
       }
     } catch (err) {
       // Не удалось даже проверить, открыт ли чат в MAX (та же сетевая

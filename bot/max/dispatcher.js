@@ -359,6 +359,7 @@ async function handleMessage(update) {
   const text = (body.text || "").trim();
   const attachments = body.attachments || [];
   const photo = attachments.find((a) => a.type === "image");
+  const media = attachments.find((a) => a.type === "image" || a.type === "video");
 
   try {
     const session = await getSession(chatId, user.id);
@@ -371,6 +372,7 @@ async function handleMessage(update) {
       if (text && text.trim().toLowerCase() === "выйти") {
         return await chat.exit(chatId, user, session);
       }
+      if (media) return await chat.forwardAttachment(chatId, user, session, media, text);
       if (text) return await chat.forward(chatId, user, session, text);
       return;
     }

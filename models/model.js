@@ -482,6 +482,32 @@ const Message = sequelize.define(
     text: {
       type: DataTypes.STRING,
     },
+    // "text" | "image" | "video" — тип содержимого сообщения. Текст и
+    // вложение не взаимоисключающие: text здесь используется как подпись
+    // к фото/видео (см. sendMessage в chatController).
+    type: {
+      type: DataTypes.STRING,
+      defaultValue: "text",
+    },
+    // Путь к файлу вложения относительно static/ (например
+    // "chat/<chatId>/<file>.jpg") — раздаётся тем же express.static,
+    // что и static/uploads.
+    fileUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    fileName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    fileMimeType: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    fileSize: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     chatId: {
       type: DataTypes.UUID,
       references: {

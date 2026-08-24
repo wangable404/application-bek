@@ -86,37 +86,49 @@ async function doSendMessage(chatId, text, keyboard) {
 }
 
 /**
- * Отправить фото по прямой ссылке (используется для показа уже загруженных
- * фотоотчётов пользователю в чате бота).
+ * Отправить фото/видео из буфера, уже находящегося в памяти (сообщение
+ * чата с вложением) — сериализуется по chatId так же, как maxSendMessage,
+ * иначе вложение может обогнать/перепутаться местами с соседним текстовым
+ * сообщением в том же чате.
+ * @param {string|number} chatId
+ * @param {Buffer} buffer
+ * @param {string} filename
+ * @param {string} mimeType
+ * @param {string} [caption]
  */
-async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
+function maxSendAttachment(chatId, buffer, filename, mimeType, caption) {
+  const key = String(chatId);
+  const prev = sendQueues.get(key) || Promise.resolve();
+
+  const run = prev.then(() =>
+    doSendAttachment(chatId, buffer, filename, mimeType, caption),
+  );
+  sendQueues.set(key, run.catch(() => {}));
+
+  return run;
+}
+
+async function doSendAttachment(chatId, buffer, filename, mimeType, caption) {
   try {
+    const attachmentType = mimeType?.startsWith("video") ? "video" : "image";
+
     const uploadRes = await maxApi.post("/uploads", null, {
-      params: { type: "image" },
+      params: { type: attachmentType },
     });
     const uploadUrl = uploadRes.data?.url;
     if (!uploadUrl) return null;
 
-    const fileResponse = await axios.get(photoUrl, {
-      responseType: "arraybuffer",
-      httpsAgent: keepAliveAgent,
-      timeout: 30000,
-    });
-
     const form = new FormData();
-    form.append(
-      "file",
-      new Blob([fileResponse.data]),
-      "photo.jpg",
-    );
+    form.append("file", new Blob([buffer], { type: mimeType }), filename);
 
     const uploaded = await axios.post(uploadUrl, form, {
       httpsAgent: keepAliveAgent,
-      timeout: 30000,
+      timeout: 60000,
     });
-    const token = uploaded.data?.photos
-      ? Object.values(uploaded.data.photos)[0]?.token
-      : uploaded.data?.token;
+    const token =
+      attachmentType === "image" && uploaded.data?.photos
+        ? Object.values(uploaded.data.photos)[0]?.token
+        : uploaded.data?.token;
 
     if (!token) return null;
 
@@ -124,9 +136,34 @@ async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
       "/messages",
       {
         text: caption || "",
-        attachments: [{ type: "image", payload: { token } }],
+        attachments: [{ type: attachmentType, payload: { token } }],
       },
       { params: { chat_id: chatId } },
+    );
+  } catch (err) {
+    console.log("max sendAttachment error:", err.response?.data || err.message);
+    return null;
+  }
+}
+
+/**
+ * Отправить фото по прямой ссылке (используется для показа уже загруженных
+ * фотоотчётов пользователю в чате бота).
+ */
+async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
+  try {
+    const fileResponse = await axios.get(photoUrl, {
+      responseType: "arraybuffer",
+      httpsAgent: keepAliveAgent,
+      timeout: 30000,
+    });
+
+    return await maxSendAttachment(
+      chatId,
+      Buffer.from(fileResponse.data),
+      "photo.jpg",
+      "image/jpeg",
+      caption,
     );
   } catch (err) {
     console.log("max sendPhoto error:", err.response?.data || err.message);
@@ -182,6 +219,7 @@ async function maxAnswerCallback(callbackId, options = {}) {
 
 module.exports = {
   maxSendMessage,
+  maxSendAttachment,
   maxSendPhotoByUrl,
   maxDownloadAttachment,
   maxAnswerCallback,

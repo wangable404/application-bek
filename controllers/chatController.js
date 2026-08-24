@@ -1,7 +1,62 @@
+const path = require("path");
+const fs = require("fs");
 const { Op } = require("sequelize");
 const ApiError = require("../error/ApiError");
 const { Chat, Message, Application, User } = require("../models/model");
 const { notifyChatMessage } = require("../services/notify.service");
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_VIDEO_TYPES = [
+  "video/mp4",
+  "video/quicktime",
+  "video/3gpp",
+  "video/webm",
+  "video/x-msvideo",
+];
+const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+
+// Вложения чата хранятся отдельно от фотоотчётов (static/uploads/...) —
+// static/chat/<chatId>/<file>, чтобы у каждого чата были свои файлы и не
+// смешивались с чужими (и чтобы не разрастался один общий каталог чата).
+async function saveChatAttachment(file, chatId) {
+  const mimeType = file.mimetype;
+  const isImage = ALLOWED_IMAGE_TYPES.includes(mimeType);
+  const isVideo = ALLOWED_VIDEO_TYPES.includes(mimeType);
+
+  if (!isImage && !isVideo) {
+    throw new Error(
+      "Неверный формат файла. Поддерживаются изображения (JPEG, PNG, WEBP, GIF) и видео (MP4, MOV, WEBM)",
+    );
+  }
+
+  const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE;
+  if (file.size > maxSize) {
+    throw new Error(
+      `Размер файла не должен превышать ${Math.round(maxSize / 1024 / 1024)}MB`,
+    );
+  }
+
+  const uploadDir = path.resolve(__dirname, "..", "static", "chat", String(chatId));
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const ext = path.extname(file.name);
+  const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9) + ext;
+  const filePath = path.join(uploadDir, uniqueName);
+  await file.mv(filePath);
+
+  const fileUrl = path.join("chat", String(chatId), uniqueName).replace(/\\/g, "/");
+
+  return {
+    type: isImage ? "image" : "video",
+    fileUrl,
+    fileName: file.name,
+    mimeType,
+    size: file.size,
+  };
+}
 
 class ChatController {
   async getByApplication(req, res, next) {
@@ -301,10 +356,11 @@ class ChatController {
   async sendMessage(req, res, next) {
     try {
       const { applicationId } = req.params;
-      const { text } = req.body;
+      const text = (req.body.text || "").trim();
       const user = req.user;
+      const file = req.files?.attachment;
 
-      if (!text || !text.trim()) {
+      if (!text && !file) {
         return next(ApiError.badRequest("Сообщение пустое"));
       }
 
@@ -338,10 +394,17 @@ class ChatController {
         }
       }
 
+      const attachment = file ? await saveChatAttachment(file, chat.id) : null;
+
       const message = await Message.create({
         chatId: chat.id,
         senderId: user.id,
-        text: text.trim(),
+        text: text || null,
+        type: attachment ? attachment.type : "text",
+        fileUrl: attachment?.fileUrl || null,
+        fileName: attachment?.fileName || null,
+        fileMimeType: attachment?.mimeType || null,
+        fileSize: attachment?.size || null,
       });
 
       // Автора сообщения уже знаем из req.user (это он и есть) — не нужно
@@ -374,9 +437,16 @@ class ChatController {
       });
 
       if (user.id !== chat.application.userId) {
-        notifyChatMessage(chat.application.userId, applicationId, text).catch(
-          (err) => console.log("notifyChatMessage error:", err.message),
-        );
+        // file.data — буфер уже прочитанного в память файла (express-fileupload
+        // без useTempFiles), тот же файл, что только что сохранён на диск.
+        // Передаём его напрямую в MAX вместо похода за файлом обратно по HTTP.
+        notifyChatMessage(chat.application.userId, applicationId, {
+          text,
+          type: fullMessage.type,
+          fileBuffer: file?.data,
+          fileName: attachment?.fileName,
+          mimeType: attachment?.mimeType,
+        }).catch((err) => console.log("notifyChatMessage error:", err.message));
       }
 
       return res.json(fullMessage);
