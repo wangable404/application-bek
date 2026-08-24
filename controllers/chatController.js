@@ -16,10 +16,11 @@ const ALLOWED_VIDEO_TYPES = [
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
-// Вложения чата хранятся отдельно от фотоотчётов (static/uploads/...) —
-// static/chat/<chatId>/<file>, чтобы у каждого чата были свои файлы и не
-// смешивались с чужими (и чтобы не разрастался один общий каталог чата).
-async function saveChatAttachment(file, chatId) {
+// Вложения чата лежат в той же дереве, что и фотоотчёты
+// (static/uploads/<applicationId>/...), рядом с ними — static/uploads/<applicationId>/chat/photo
+// или .../chat/video, чтобы у каждой заявки были свои файлы, и фото не
+// перемешивались с видео в одной папке.
+async function saveChatAttachment(file, applicationId) {
   const mimeType = file.mimetype;
   const isImage = ALLOWED_IMAGE_TYPES.includes(mimeType);
   const isVideo = ALLOWED_VIDEO_TYPES.includes(mimeType);
@@ -37,7 +38,16 @@ async function saveChatAttachment(file, chatId) {
     );
   }
 
-  const uploadDir = path.resolve(__dirname, "..", "static", "chat", String(chatId));
+  const subfolder = isImage ? "photo" : "video";
+  const uploadDir = path.resolve(
+    __dirname,
+    "..",
+    "static",
+    "uploads",
+    String(applicationId),
+    "chat",
+    subfolder,
+  );
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
@@ -47,7 +57,9 @@ async function saveChatAttachment(file, chatId) {
   const filePath = path.join(uploadDir, uniqueName);
   await file.mv(filePath);
 
-  const fileUrl = path.join("chat", String(chatId), uniqueName).replace(/\\/g, "/");
+  const fileUrl = path
+    .join("uploads", String(applicationId), "chat", subfolder, uniqueName)
+    .replace(/\\/g, "/");
 
   return {
     type: isImage ? "image" : "video",
@@ -356,7 +368,11 @@ class ChatController {
   async sendMessage(req, res, next) {
     try {
       const { applicationId } = req.params;
-      const text = (req.body.text || "").trim();
+      // req.body остаётся undefined, если в multipart-запросе нет ни одного
+      // текстового поля (express-fileupload инициализирует req.body только
+      // при первом busboy-событии 'field') — ровно так и приходит фото/видео
+      // без подписи, поэтому req.body без подстраховки нельзя трогать напрямую.
+      const text = ((req.body && req.body.text) || "").trim();
       const user = req.user;
       const file = req.files?.attachment;
 
@@ -394,7 +410,7 @@ class ChatController {
         }
       }
 
-      const attachment = file ? await saveChatAttachment(file, chat.id) : null;
+      const attachment = file ? await saveChatAttachment(file, applicationId) : null;
 
       const message = await Message.create({
         chatId: chat.id,
