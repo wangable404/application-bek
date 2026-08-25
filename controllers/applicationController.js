@@ -376,6 +376,13 @@ class ApplicationController {
 
           application.returnComment = comment;
         }
+      } else if (user.role === "COMPANY") {
+        // application.userId — это интегратор, а не компания, поэтому
+        // проверка ниже (для интегратора) сюда не подходит: раньше COMPANY
+        // всегда получал "Нет доступа", даже к заявкам своей же компании.
+        if (application.companyId !== user.id) {
+          return next(ApiError.forbidden("Нет доступа к этой заявке"));
+        }
       } else {
         if (application.userId !== user.id) {
           return next(ApiError.forbidden("Нет доступа к этой заявке"));
