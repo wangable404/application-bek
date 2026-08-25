@@ -222,7 +222,7 @@ async function handleCallback(update) {
 // приложение не показывает список заявок, пока не выбрана компания на
 // главном экране (application-app/app/(tabs)/index.tsx).
 function requiresCompany(ns, action) {
-  if (ns === "app" || ns === "work") return true;
+  if (ns === "app" || ns === "work" || ns === "apps") return true;
   if (ns === "chat" && action === "open") return true;
   return false;
 }
@@ -283,6 +283,14 @@ async function routeCallback(chatId, user, payload) {
         return applications.accept(chatId, user, arg);
       case "reject":
         return applications.reject(chatId, user, arg);
+    }
+    return;
+  }
+
+  if (ns === "apps") {
+    switch (action) {
+      case "status":
+        return applications.listByStatus(chatId, user, arg);
     }
     return;
   }

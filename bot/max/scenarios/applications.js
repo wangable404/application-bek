@@ -2,11 +2,50 @@
 const { maxSendMessage } = require("../../../services/max.service");
 const internalApi = require("../internalApi");
 const {
+  APPLICATIONS_PAGE_SIZE,
   applicationsListKeyboard,
+  applicationsStatusMenuKeyboard,
   applicationCardKeyboard,
   statusLabel,
   backToMenuKeyboard,
 } = require("../keyboards");
+
+// Та же разбивка по статусам, что и в приложении
+// (application-app/app/(tabs)/applications.tsx: STATUSES) — у компании
+// заявок может быть и 200+, плоский список без фильтра по статусу
+// бесполезен.
+const STATUS_TABS = [
+  { key: "all", label: "📋 Все" },
+  { key: "pending", label: "⏳ В ожидании" },
+  { key: "scheduled", label: "📅 Назначена дата" },
+  { key: "in_progress", label: "⚙️ В работе" },
+  { key: "review", label: "🔍 На проверке" },
+  { key: "approved", label: "✅ Подтверждено" },
+  { key: "rejected", label: "❌ Отклонено" },
+];
+
+// Копия фильтрации из application-app/app/(tabs)/applications.tsx
+// (filteredAndSortedCards/getStatusCount) — "В ожидании" и "Назначена
+// дата" оба разбирают status === "accepted" по наличию agreedDate.
+function filterByStatus(applications, statusKey) {
+  if (statusKey === "all") return applications;
+  if (statusKey === "scheduled") {
+    return applications.filter((a) => a.status === "accepted" && !!a.agreedDate);
+  }
+  if (statusKey === "pending") {
+    return applications.filter(
+      (a) => a.status === "pending" || (a.status === "accepted" && !a.agreedDate),
+    );
+  }
+  return applications.filter((a) => a.status === statusKey);
+}
+
+function statusTabsWithCounts(applications) {
+  return STATUS_TABS.map((t) => ({
+    ...t,
+    count: filterByStatus(applications, t.key).length,
+  }));
+}
 
 async function listApplications(chatId, user) {
   const applications = await internalApi.getApplications(user, user.maxCompanyId);
@@ -18,8 +57,32 @@ async function listApplications(chatId, user) {
 
   await maxSendMessage(
     chatId,
-    `Ваши заявки (${applications.length}):`,
-    applicationsListKeyboard(applications),
+    `Ваши заявки (${applications.length}). Выберите статус:`,
+    applicationsStatusMenuKeyboard(statusTabsWithCounts(applications)),
+  );
+}
+
+async function listByStatus(chatId, user, statusKey) {
+  const applications = await internalApi.getApplications(user, user.maxCompanyId);
+  const tab = STATUS_TABS.find((t) => t.key === statusKey);
+  const filtered = filterByStatus(applications, statusKey);
+
+  if (!filtered.length) {
+    await maxSendMessage(
+      chatId,
+      `Нет заявок в статусе «${tab?.label || statusKey}».`,
+      applicationsStatusMenuKeyboard(statusTabsWithCounts(applications)),
+    );
+    return;
+  }
+
+  const shown = Math.min(filtered.length, APPLICATIONS_PAGE_SIZE);
+  const suffix = filtered.length > shown ? `, показаны первые ${shown}` : "";
+
+  await maxSendMessage(
+    chatId,
+    `${tab?.label || statusKey} (${filtered.length}${suffix}):`,
+    applicationsListKeyboard(filtered),
   );
 }
 
@@ -67,6 +130,7 @@ async function reject(chatId, user, applicationId) {
 
 module.exports = {
   listApplications,
+  listByStatus,
   showCard,
   accept,
   reject,

@@ -543,7 +543,13 @@ class UserController {
 
   async getIntegrators(req, res, next) {
     try {
-      const companyId = req.user.id;
+      const user = req.user;
+      // ADMIN может явно запросить интеграторов конкретной компании (например,
+      // чтобы переназначить отклонённую заявку) — своей компании при этом у
+      // ADMIN нет, поэтому companyId=req.user.id по умолчанию для него бы не
+      // сработал. Обычная COMPANY по-прежнему видит только своих интеграторов.
+      const companyId =
+        user.role === "ADMIN" && req.query.companyId ? req.query.companyId : user.id;
 
       const invitations = await Invitation.findAll({
         where: { companyId },

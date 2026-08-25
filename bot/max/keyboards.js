@@ -45,14 +45,29 @@ const backToMenuKeyboard = () =>
 const cancelKeyboard = () =>
   inlineKeyboard([[callbackButton("✖️ Отмена", "scenario:cancel")]]);
 
-const applicationsListKeyboard = (applications) =>
+// При большом числе заявок (у компании их может быть и 200+) плоский
+// список кнопок становится бесполезным — сначала выбор статуса
+// (applicationsStatusMenuKeyboard), и только потом список внутри
+// выбранного статуса, с ограничением на число кнопок в одном сообщении.
+const APPLICATIONS_PAGE_SIZE = 30;
+
+const applicationsListKeyboard = (applications, backPayload = "menu:applications") =>
   inlineKeyboard([
-    ...applications.map((app) => [
+    ...applications.slice(0, APPLICATIONS_PAGE_SIZE).map((app) => [
       callbackButton(
         `#${app.dealId} · ${app.clientBio || app.city || "—"} · ${statusLabel(app.status)}`,
         `app:open:${app.id}`,
       ),
     ]),
+    [callbackButton("⬅️ К статусам", backPayload)],
+  ]);
+
+// tabs: [{ key, label, count }] — та же разбивка, что и в приложении
+// (application-app/app/(tabs)/applications.tsx: STATUSES), чтобы
+// интегратор ориентировался одинаково в обоих местах.
+const applicationsStatusMenuKeyboard = (tabs) =>
+  inlineKeyboard([
+    ...tabs.map((t) => [callbackButton(`${t.label} (${t.count})`, `apps:status:${t.key}`)]),
     [callbackButton("⬅️ В меню", "menu:root")],
   ]);
 
@@ -77,7 +92,7 @@ const applicationCardKeyboard = (app) => {
   }
 
   rows.push([callbackButton("💬 Открыть чат", `chat:open:${app.id}`)]);
-  rows.push([callbackButton("⬅️ К списку заявок", "menu:applications")]);
+  rows.push([callbackButton("⬅️ К заявкам", "menu:applications")]);
 
   return inlineKeyboard(rows);
 };
@@ -137,6 +152,18 @@ const carMoreKeyboard = () =>
 const chatExitKeyboard = () =>
   inlineKeyboard([[callbackButton("🚪 Выйти из чата", "chat:exit")]]);
 
+// Кнопка-переход из push-подобного уведомления (новая заявка, смена
+// статуса и т.п.) прямо к карточке заявки — чтобы не приходилось идти
+// туда через "Все заявки" вручную.
+const applicationLinkKeyboard = (applicationId) =>
+  inlineKeyboard([[callbackButton("📂 Открыть заявку", `app:open:${applicationId}`)]]);
+
+// То же самое для уведомления о новом сообщении в чате, когда бот сейчас
+// не в этом чате (иначе кнопка была бы избыточной — пользователь и так
+// там).
+const chatLinkKeyboard = (applicationId) =>
+  inlineKeyboard([[callbackButton("💬 Открыть чат", `chat:open:${applicationId}`)]]);
+
 // Компании, к которым интегратор уже принят — выбор "текущей" (аналог
 // setCompany в приложении). currentCompanyId подсвечивать нечем в чате
 // (кнопки не умеют "активное" состояние), поэтому просто помечаем текст.
@@ -190,7 +217,9 @@ module.exports = {
   mainMenuKeyboard,
   backToMenuKeyboard,
   cancelKeyboard,
+  APPLICATIONS_PAGE_SIZE,
   applicationsListKeyboard,
+  applicationsStatusMenuKeyboard,
   applicationCardKeyboard,
   doneKeyboard,
   skipKeyboard,
@@ -200,6 +229,8 @@ module.exports = {
   restartConfirmKeyboard,
   carMoreKeyboard,
   chatExitKeyboard,
+  applicationLinkKeyboard,
+  chatLinkKeyboard,
   companiesListKeyboard,
   invitationCardKeyboard,
   backToCompaniesKeyboard,

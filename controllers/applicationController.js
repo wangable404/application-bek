@@ -117,7 +117,7 @@ class ApplicationController {
           userId,
           "Новая заявка",
           "У вас появилась новая заявка на работу",
-          { screen: `/(tabs)/applications` },
+          { screen: `/(tabs)/applications`, applicationId: application.id },
         );
 
         return res.json(application);
@@ -151,7 +151,7 @@ class ApplicationController {
         userId,
         "Новая заявка",
         "У вас появилась новая заявка на работу",
-        { screen: `/(tabs)/applications` },
+        { screen: `/(tabs)/applications`, applicationId: newApplication.id },
       );
       return res.json(newApplication);
     } catch (err) {
@@ -313,6 +313,7 @@ class ApplicationController {
       try {
         await notifyUser(userId, "Заявка отклонена", "Менеджер отклонил заявку", {
           screen: `/(tabs)/applications`,
+          applicationId: application.id,
         });
       } catch (notifyErr) {
         console.log("notifyUser error:", notifyErr.message);
@@ -376,7 +377,6 @@ class ApplicationController {
           application.returnComment = comment;
         }
       } else {
-        // Проверка что заявка принадлежит пользователю
         if (application.userId !== user.id) {
           return next(ApiError.forbidden("Нет доступа к этой заявке"));
         }
@@ -394,7 +394,7 @@ class ApplicationController {
             application.userId,
             notification.title,
             notification.message,
-            { screen: "/(tabs)/applications" },
+            { screen: "/(tabs)/applications", applicationId: application.id },
           );
         } catch (notifyErr) {
           console.log("notifyUser error:", notifyErr.message);
@@ -559,7 +559,7 @@ class ApplicationController {
           req.user.id,
           "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
-          { screen: `/(tabs)/applications` },
+          { screen: `/(tabs)/applications`, applicationId: id },
         );
       }
 
@@ -768,7 +768,7 @@ class ApplicationController {
           req.user.id,
           "🎉 Заявка на рассмотрении",
           "Ваша работа на рассмотрении",
-          { screen: `/(tabs)/applications` },
+          { screen: `/(tabs)/applications`, applicationId },
         );
       }
 
