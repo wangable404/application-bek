@@ -263,6 +263,8 @@ async function routeCallback(chatId, user, payload) {
         return companies.selectCompany(chatId, user, arg);
       case "invites":
         return companies.showInvitations(chatId, user);
+      case "open":
+        return companies.showInvitation(chatId, user, arg);
       case "accept":
         return companies.respondInvite(chatId, user, arg, true);
       case "reject":

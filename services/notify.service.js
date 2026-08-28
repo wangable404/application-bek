@@ -1,13 +1,18 @@
 // services/notify.service.js
 const { maxSendMessage, maxSendAttachment } = require("./max.service");
-const { applicationLinkKeyboard, chatLinkKeyboard } = require("../bot/max/keyboards");
+const {
+  applicationLinkKeyboard,
+  chatLinkKeyboard,
+  invitationLinkKeyboard,
+} = require("../bot/max/keyboards");
 const { PushToken, MaxChat, MaxBotSession } = require("../models/model");
 const { sendPush } = require("./push.service");
 
 // Значимые события (новая заявка, смена статуса и т.п.) — шлём в MAX
 // всегда, это редкие и важные уведомления, как push в приложении.
-// data.applicationId (если есть) даёт кнопку "Открыть заявку" — без неё
-// нужно было вручную идти через "Все заявки" и искать нужную в списке.
+// data.applicationId/data.invitationId (если есть) дают кнопку-переход
+// прямо к заявке или к приглашению — без неё было непонятно, куда идти
+// самому (искать через "Все заявки"/"Приглашения" вручную).
 async function notifyUser(userId, title, body, data = {}) {
   const [tokens, maxChats] = await Promise.all([
     PushToken.findAll({ where: { userId }, attributes: ["token"] }),
@@ -17,7 +22,9 @@ async function notifyUser(userId, title, body, data = {}) {
   const maxText = `${title}\n${body}`;
   const keyboard = data.applicationId
     ? applicationLinkKeyboard(data.applicationId)
-    : undefined;
+    : data.invitationId
+      ? invitationLinkKeyboard(data.invitationId)
+      : undefined;
 
   await Promise.allSettled([
     sendPush(

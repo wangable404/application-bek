@@ -63,6 +63,17 @@ async function selectCompany(chatId, user, companyId) {
   await listApplications(chatId, user);
 }
 
+function formatInvitation(invitation) {
+  const name =
+    `${invitation.info?.firstName || ""} ${invitation.info?.lastName || ""}`.trim() ||
+    "Компания";
+  const lines = [`🏢 ${name}`];
+  if (invitation.info?.city) lines.push(`Город: ${invitation.info.city}`);
+  if (invitation.info?.phone) lines.push(`Телефон: ${invitation.info.phone}`);
+  if (invitation.info?.description) lines.push(invitation.info.description);
+  return lines.join("\n");
+}
+
 async function showInvitations(chatId, user) {
   const invitations = await internalApi.getInvitations(user);
   const pending = pendingOnly(invitations);
@@ -79,16 +90,28 @@ async function showInvitations(chatId, user) {
   await maxSendMessage(chatId, `✉️ Приглашения, ожидающие ответа (${pending.length}):`);
 
   for (const invitation of pending) {
-    const name =
-      `${invitation.info?.firstName || ""} ${invitation.info?.lastName || ""}`.trim() ||
-      "Компания";
-    const lines = [`🏢 ${name}`];
-    if (invitation.info?.city) lines.push(`Город: ${invitation.info.city}`);
-    if (invitation.info?.phone) lines.push(`Телефон: ${invitation.info.phone}`);
-    if (invitation.info?.description) lines.push(invitation.info.description);
-
-    await maxSendMessage(chatId, lines.join("\n"), invitationCardKeyboard(invitation));
+    await maxSendMessage(chatId, formatInvitation(invitation), invitationCardKeyboard(invitation));
   }
+}
+
+// Открыть конкретное приглашение по кнопке из push-подобного уведомления
+// (userController.inviteCreate -> notifyUser с data.invitationId) — без
+// него было непонятно, что уведомление вообще про приглашение и куда за
+// ним идти (только текст, без действия).
+async function showInvitation(chatId, user, invitationId) {
+  const invitations = await internalApi.getInvitations(user);
+  const invitation = invitations.find((inv) => String(inv.id) === String(invitationId));
+
+  if (!invitation || invitation.approved || invitation.rejected) {
+    await maxSendMessage(
+      chatId,
+      "Приглашение не найдено или уже обработано.",
+      backToCompaniesKeyboard(),
+    );
+    return;
+  }
+
+  await maxSendMessage(chatId, formatInvitation(invitation), invitationCardKeyboard(invitation));
 }
 
 async function respondInvite(chatId, user, invitationId, approved) {
@@ -105,5 +128,6 @@ module.exports = {
   promptSelect,
   selectCompany,
   showInvitations,
+  showInvitation,
   respondInvite,
 };

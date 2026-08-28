@@ -18,7 +18,7 @@ class UserController {
   async create(req, res, next) {
     try {
       const user = req.user;
-      
+
       if (user.role !== "ADMIN") {
         return next(ApiError.badRequest("Нет доступа"));
       }
@@ -26,14 +26,24 @@ class UserController {
       const { firstName, lastName, phone, city, email, password, role } =
         req.body;
 
-      if(!firstName || !lastName || !phone || !city || !email || !password || !role) {
+      if (
+        !firstName ||
+        !lastName ||
+        !phone ||
+        !city ||
+        !email ||
+        !password ||
+        !role
+      ) {
         return next(ApiError.badRequest("Заполните все необходимые поля"));
       }
 
       const existingUser = await User.findOne({ where: { email } });
 
       if (existingUser) {
-        return next(ApiError.badRequest("Пользователь с таким email уже существует"));
+        return next(
+          ApiError.badRequest("Пользователь с таким email уже существует"),
+        );
       }
 
       const hashPassword = await bcrypt.hash(password, 10);
@@ -218,7 +228,11 @@ class UserController {
       }
 
       if (!user.isVerified) {
-        return next(ApiError.forbidden("Почта не подтверждена, обратитесь к администратору"));
+        return next(
+          ApiError.forbidden(
+            "Почта не подтверждена, обратитесь к администратору",
+          ),
+        );
       }
 
       const comparePassword = await bcrypt.compare(password, user.password);
@@ -310,11 +324,12 @@ class UserController {
       next(ApiError.badRequest(err.message));
     }
   }
-  async getAll(req, res, next) {
+  async getByCompanyId(req, res, next) {
     try {
+      const { companyId } = req.params;
       const users = await User.findAll({
         attributes: ["id", "firstName", "lastName", "email", "role", "city"],
-        where: { role: "USER" },
+        where: { companyId, role: "USER" },
       });
       return res.json(users);
     } catch (err) {
@@ -499,11 +514,11 @@ class UserController {
       }
 
       await notifyUser(
-          userId,
-          "Приглашение от компании",
-          `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
-          { screen: `/(tabs)/companies` },
-        );
+        userId,
+        "Приглашение от компании",
+        `Компания ${user.firstName} ${user.lastName} приглашает вас в свою компанию`,
+        { screen: `/(tabs)/companies`, invitationId: invitation.id },
+      );
 
       return res.json(invitation);
     } catch (err) {
@@ -549,7 +564,9 @@ class UserController {
       // ADMIN нет, поэтому companyId=req.user.id по умолчанию для него бы не
       // сработал. Обычная COMPANY по-прежнему видит только своих интеграторов.
       const companyId =
-        user.role === "ADMIN" && req.query.companyId ? req.query.companyId : user.id;
+        user.role === "ADMIN" && req.query.companyId
+          ? req.query.companyId
+          : user.id;
 
       const invitations = await Invitation.findAll({
         where: { companyId },

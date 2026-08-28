@@ -164,6 +164,14 @@ const applicationLinkKeyboard = (applicationId) =>
 const chatLinkKeyboard = (applicationId) =>
   inlineKeyboard([[callbackButton("💬 Открыть чат", `chat:open:${applicationId}`)]]);
 
+// То же самое для уведомления о новом приглашении от компании — ведёт
+// прямо к карточке этого приглашения (принять/отклонить), а не просто
+// сообщает текстом, что куда-то нужно перейти самому.
+const invitationLinkKeyboard = (invitationId) =>
+  inlineKeyboard([
+    [callbackButton("✉️ Перейти к приглашению", `company:open:${invitationId}`)],
+  ]);
+
 // Компании, к которым интегратор уже принят — выбор "текущей" (аналог
 // setCompany в приложении). currentCompanyId подсвечивать нечем в чате
 // (кнопки не умеют "активное" состояние), поэтому просто помечаем текст.
@@ -231,6 +239,7 @@ module.exports = {
   chatExitKeyboard,
   applicationLinkKeyboard,
   chatLinkKeyboard,
+  invitationLinkKeyboard,
   companiesListKeyboard,
   invitationCardKeyboard,
   backToCompaniesKeyboard,
