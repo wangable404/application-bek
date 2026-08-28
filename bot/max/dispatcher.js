@@ -221,8 +221,14 @@ async function handleCallback(update) {
 // Без выбранной компании работать с заявками нельзя — так же, как
 // приложение не показывает список заявок, пока не выбрана компания на
 // главном экране (application-app/app/(tabs)/index.tsx).
+// Исключение — app:open: это прямой переход по конкретной заявке (кнопка
+// из push-уведомления), а не просмотр списка. Он должен открывать карточку
+// сразу, независимо от того, выбрана ли компания и какая именно — иначе
+// клик по "Открыть заявку" в уведомлении утыкался в "выберите компанию"
+// вместо самой заявки.
 function requiresCompany(ns, action) {
-  if (ns === "app" || ns === "work" || ns === "apps") return true;
+  if (ns === "app" && action !== "open") return true;
+  if (ns === "work" || ns === "apps") return true;
   if (ns === "chat" && action === "open") return true;
   return false;
 }
