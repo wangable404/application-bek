@@ -14,7 +14,7 @@ router.get('/auth/check', authMiddleware, userController.check)
 router.get('/max/connection', authMiddleware, userController.getMaxConnection)
 router.get('/admin', authMiddleware, userController.getAllAdmin)
 router.get('/company', authMiddleware, userController.getCompanys)
-router.get('/:companyId', userController.getByCompanyId)
+router.get('/users', authMiddleware, userController.getAll)
 router.delete('/:id', authMiddleware, userController.delete)
 
 router.post('/invite', authMiddleware, userController.inviteCreate)
