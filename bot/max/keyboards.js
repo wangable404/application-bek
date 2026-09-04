@@ -82,7 +82,7 @@ const applicationCardKeyboard = (app) => {
   }
 
   if (app.status === "accepted") {
-    rows.push([callbackButton("▶️ Начать работу", `work:start:${app.id}`)]);
+    rows.push([callbackButton("📆 Указать дату", `work:start:${app.id}`)]);
   }
 
   if (app.status === "in_progress") {
