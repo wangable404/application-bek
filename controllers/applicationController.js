@@ -88,6 +88,15 @@ class ApplicationController {
         attributes: ["token"],
       });
 
+      const companyUser = companyId
+        ? await User.findByPk(companyId, {
+            attributes: ["firstName", "lastName"],
+          })
+        : null;
+      const companyName =
+        `${companyUser?.firstName || ""} ${companyUser?.lastName || ""}`.trim() ||
+        "Компания";
+
       if (application) {
         if (application.status === "rejected") {
           application.status = "pending";
@@ -116,7 +125,7 @@ class ApplicationController {
         await notifyUser(
           userId,
           "Новая заявка",
-          "У вас появилась новая заявка на работу",
+          `У вас появилась новая заявка на работу от компании ${companyName}`,
           { screen: `/(tabs)/applications`, applicationId: application.id },
         );
 
@@ -150,7 +159,7 @@ class ApplicationController {
       await notifyUser(
         userId,
         "Новая заявка",
-        "У вас появилась новая заявка на работу",
+        `У вас появилась новая заявка на работу от компании ${companyName}`,
         { screen: `/(tabs)/applications`, applicationId: newApplication.id },
       );
       return res.json(newApplication);
