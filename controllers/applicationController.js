@@ -22,7 +22,6 @@ const removeDir = (dirPath) => {
   }
 };
 
-// Вспомогательная функция для сохранения файла и возврата относительного пути
 const saveFileLocally = async (
   file,
   applicationId,
@@ -45,7 +44,6 @@ const saveFileLocally = async (
   const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9) + ext;
   const filePath = path.join(uploadDir, uniqueName);
   await file.mv(filePath);
-  // Возвращаем путь относительно static
   return path
     .join("uploads", applicationId, completionId, subfolder, uniqueName)
     .replace(/\\/g, "/");
@@ -316,9 +314,6 @@ class ApplicationController {
       application.status = "rejected";
       await application.save();
 
-      // Уведомление — уже после того, как статус реально сохранён: сбой
-      // отправки (push/MAX) не должен превращать выполненное действие
-      // в ошибку для того, кто его вызвал.
       try {
         await notifyUser(userId, "Заявка отклонена", "Менеджер отклонил заявку", {
           screen: `/(tabs)/applications`,
@@ -372,7 +367,6 @@ class ApplicationController {
         },
       };
 
-      // ADMIN логика
       if (user.role === "ADMIN") {
         if (status === "in_progress") {
           if (!comment || !comment.trim()) {
@@ -386,9 +380,6 @@ class ApplicationController {
           application.returnComment = comment;
         }
       } else if (user.role === "COMPANY") {
-        // application.userId — это интегратор, а не компания, поэтому
-        // проверка ниже (для интегратора) сюда не подходит: раньше COMPANY
-        // всегда получал "Нет доступа", даже к заявкам своей же компании.
         if (application.companyId !== user.id) {
           return next(ApiError.forbidden("Нет доступа к этой заявке"));
         }
@@ -401,8 +392,6 @@ class ApplicationController {
       application.status = status;
       await application.save();
 
-      // Уведомление — после сохранения статуса и без права заблокировать
-      // уже выполненное изменение при сбое отправки.
       const notification = notifications[status];
       if (notification) {
         try {
@@ -460,7 +449,6 @@ class ApplicationController {
         return next(ApiError.badRequest("Не указаны марка или госномер"));
       }
 
-      // --- Сбор оборудования из req.body ---
       const equipmentMap = {};
       Object.keys(req.body).forEach((key) => {
         const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
@@ -474,7 +462,6 @@ class ApplicationController {
         }
       });
 
-      // --- Получение файлов фотографий автомобиля ---
       let photoFiles = [];
       if (req.files && req.files.photos) {
         photoFiles = Array.isArray(req.files.photos)
@@ -485,12 +472,7 @@ class ApplicationController {
         return next(ApiError.badRequest("Не загружены фотографии автомобиля"));
       }
 
-      // Всё, что пишет в БД ниже, идёт одной транзакцией: если что-то из
-      // этого упадёт (например, повторная отправка после сбойного ответа
-      // ботом/приложением), в базе не должно остаться половинчатой записи
-      // завершения, которую потом легко продублировать повторной попыткой.
       const completion = await sequelize.transaction(async (t) => {
-        // --- Создание записи завершения (чтобы получить completionId) ---
         const completion = await ApplicationCompletion.create(
           { brand, stateNumber, applicationId: id },
           { transaction: t },
@@ -498,7 +480,6 @@ class ApplicationController {
 
         const completionId = completion.id.toString();
 
-        // --- Сохранение фотографий автомобиля локально ---
         const photoPaths = [];
         for (const file of photoFiles) {
           const relativePath = await saveFileLocally(
@@ -510,7 +491,6 @@ class ApplicationController {
           photoPaths.push(relativePath);
         }
 
-        // Сохраняем записи фото в БД
         for (const pPath of photoPaths) {
           await ApplicationCompletionPhoto.create(
             { path: pPath, completionId: completion.id },
@@ -518,7 +498,6 @@ class ApplicationController {
           );
         }
 
-        // --- Обработка оборудования ---
         const equipmentArray = Object.keys(equipmentMap)
           .sort((a, b) => parseInt(a) - parseInt(b))
           .map((idx) => equipmentMap[idx]);
@@ -569,7 +548,6 @@ class ApplicationController {
         return completion;
       });
 
-      // Уведомление — уже после успешного коммита транзакции.
       if (sendType == "default") {
         await notifyUser(
           req.user.id,
@@ -616,22 +594,15 @@ class ApplicationController {
       const applicationId = completion.applicationId.toString();
       const compId = completion.id.toString();
 
-      // Как и в completeApplication — вся запись идёт одной транзакцией,
-      // чтобы сбойный ответ и повторная попытка не оставляли в базе
-      // наполовину применённые изменения (часть фото/оборудования
-      // обновилась, часть — нет).
       await sequelize.transaction(async (t) => {
-        // 1. Обновляем основные поля
         await completion.update({ brand, stateNumber }, { transaction: t });
 
-        // 2. Обработка фото автомобиля
         let existingPhotoIds = req.body.existingPhotos;
         if (existingPhotoIds && !Array.isArray(existingPhotoIds)) {
           existingPhotoIds = [existingPhotoIds];
         }
         existingPhotoIds = existingPhotoIds || [];
 
-        // Удаляем фото, которых нет в списке (и их файлы)
         const photosToDelete = completion.photos.filter(
           (p) => !existingPhotoIds.includes(p.id),
         );
@@ -641,7 +612,6 @@ class ApplicationController {
           await photo.destroy({ transaction: t });
         }
 
-        // Добавляем новые фото из файлов
         let photoFiles = [];
         if (req.files && req.files.photos) {
           photoFiles = Array.isArray(req.files.photos)
@@ -662,7 +632,6 @@ class ApplicationController {
           );
         }
 
-        // 3. Обработка оборудования
         const equipmentMap = {};
         Object.keys(req.body).forEach((key) => {
           const match = key.match(/^equipment\[(\d+)\]\.(.+)$/);
@@ -674,7 +643,6 @@ class ApplicationController {
           }
         });
 
-        // Собираем файлы imeiPhoto
         const imeiPhotoFiles = {};
         if (req.files) {
           Object.keys(req.files).forEach((key) => {
@@ -685,7 +653,6 @@ class ApplicationController {
           });
         }
 
-        // Обрабатываем каждую запись оборудования
         for (const [idxStr, eqData] of Object.entries(equipmentMap)) {
           const equipmentId = eqData.id;
           let equipment;
@@ -708,7 +675,6 @@ class ApplicationController {
             );
           }
 
-          // Обработка imeiPhoto
           const imeiFile = imeiPhotoFiles[idxStr];
           const existingImeiPhotoId = eqData.imeiPhotoId;
 
@@ -733,7 +699,6 @@ class ApplicationController {
               { transaction: t },
             );
           } else if (existingImeiPhotoId) {
-            // Оставляем без изменений
           } else if (equipment.imeiPhoto) {
             const oldPath = path.resolve(
               __dirname,
@@ -746,7 +711,6 @@ class ApplicationController {
           }
         }
 
-        // Удаление оборудования, не упомянутого в запросе
         const processedEquipmentIds = Object.values(equipmentMap)
           .map((eq) => eq.id)
           .filter((id) => id);
@@ -812,7 +776,6 @@ class ApplicationController {
       const applicationId = completion.applicationId.toString();
       const compId = completion.id.toString();
 
-      // Удаляем всю папку с файлами
       const uploadDir = path.resolve(
         __dirname,
         "..",
@@ -823,7 +786,6 @@ class ApplicationController {
       );
       removeDir(uploadDir);
 
-      // Удаляем запись из БД (каскадно удалятся equipment и photos, но файлы уже удалены)
       await completion.destroy();
 
       return res.json({ success: true });
@@ -837,26 +799,22 @@ class ApplicationController {
       const { id } = req.params;
       const user = req.user;
 
-      // Проверяем права доступа (только ADMIN или владелец заявки)
       const application = await Application.findOne({ where: { id } });
 
       if (!application) {
         return next(ApiError.notFound("Заявка не найдена"));
       }
 
-      // Проверка прав: только ADMIN или пользователь, создавший заявку
       if (user.role !== "ADMIN" && application.userId !== user.id) {
         return next(ApiError.forbidden("Нет доступа к этой заявке"));
       }
 
-      // Проверяем наличие файла
       if (!req.files || !req.files.qrCode) {
         return next(ApiError.badRequest("Файл QR-кода не загружен"));
       }
 
       const qrFile = req.files.qrCode;
 
-      // Проверка типа файла
       const allowedTypes = [
         "image/jpeg",
         "image/png",
@@ -871,7 +829,6 @@ class ApplicationController {
         );
       }
 
-      // Проверка размера (максимум 5MB)
       const maxSize = 5 * 1024 * 1024;
       if (qrFile.size > maxSize) {
         return next(
@@ -879,7 +836,6 @@ class ApplicationController {
         );
       }
 
-      // Удаляем старый QR-код, если есть
       if (application.qrCode) {
         const oldQrPath = path.resolve(
           __dirname,
@@ -892,7 +848,6 @@ class ApplicationController {
         }
       }
 
-      // Создаем директорию для QR-кодов
       const qrUploadDir = path.resolve(
         __dirname,
         "..",
@@ -905,18 +860,15 @@ class ApplicationController {
         fs.mkdirSync(qrUploadDir, { recursive: true });
       }
 
-      // Сохраняем файл
       const ext = path.extname(qrFile.name);
       const uniqueName = `qr_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
       const filePath = path.join(qrUploadDir, uniqueName);
       await qrFile.mv(filePath);
 
-      // Относительный путь для сохранения в БД
       const relativePath = path
         .join("uploads", id.toString(), "qrcode", uniqueName)
         .replace(/\\/g, "/");
 
-      // Обновляем запись в БД
       application.qrCode = relativePath;
       await application.save();
 

@@ -1,13 +1,5 @@
 // utils/maxBindToken.js
 //
-// Токен для привязки MAX-аккаунта через deep link (?start=...).
-// Раньше был JWT — но MAX обрезает/не передаёт payload диплинка длиннее
-// 128 символов, а подписанный JWT с userId (UUID) внутри выходит далеко
-// за этот лимит (реально наблюдали: MAX присылал bot_started вообще без
-// payload). Поэтому здесь — короткий случайный opaque-токен, а сам userId
-// и срок жизни хранятся на сервере (таблица max_bind_tokens), не в самом
-// токене. Заодно он безопаснее JWT: даже частичный перехват токена не даёт
-// расшифровать/угадать, чей это аккаунт.
 const crypto = require("crypto");
 const { MaxBindToken } = require("../models/model");
 
@@ -23,7 +15,6 @@ async function generateBindToken(userId) {
   return token;
 }
 
-// Одноразовый: успешно проверенный токен сразу удаляется.
 async function verifyBindToken(token) {
   if (!token) {
     throw new Error("Отсутствует токен привязки");

@@ -1,4 +1,3 @@
-// bot/max/scenarios/menu.js — главное меню и помощь.
 const { maxSendMessage } = require("../../../services/max.service");
 const { mainMenuKeyboard } = require("../keyboards");
 const { resetSession } = require("../session");
@@ -21,8 +20,6 @@ const WELCOME_TEXT =
 
 const HELP_TEXT = `❓ Что умеет бот\n\n${CAPABILITIES_TEXT}`;
 
-// user опционален только для обратной совместимости с местом, где он
-// ещё не известен (сразу после bot_started компания точно не выбрана).
 async function showWelcome(chatId, user) {
   await maxSendMessage(chatId, WELCOME_TEXT, mainMenuKeyboard(!!user?.maxCompanyId));
 }

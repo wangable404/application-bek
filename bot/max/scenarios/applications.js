@@ -1,4 +1,3 @@
-// bot/max/scenarios/applications.js — список заявок, карточка, принять/отклонить.
 const { maxSendMessage } = require("../../../services/max.service");
 const internalApi = require("../internalApi");
 const {
@@ -10,10 +9,6 @@ const {
   backToMenuKeyboard,
 } = require("../keyboards");
 
-// Та же разбивка по статусам, что и в приложении
-// (application-app/app/(tabs)/applications.tsx: STATUSES) — у компании
-// заявок может быть и 200+, плоский список без фильтра по статусу
-// бесполезен.
 const STATUS_TABS = [
   { key: "all", label: "📋 Все" },
   { key: "pending", label: "⏳ В ожидании" },
@@ -24,9 +19,6 @@ const STATUS_TABS = [
   { key: "rejected", label: "❌ Отклонено" },
 ];
 
-// Копия фильтрации из application-app/app/(tabs)/applications.tsx
-// (filteredAndSortedCards/getStatusCount) — "В ожидании" и "Назначена
-// дата" оба разбирают status === "accepted" по наличию agreedDate.
 function filterByStatus(applications, statusKey) {
   if (statusKey === "all") return applications;
   if (statusKey === "scheduled") {
@@ -103,12 +95,6 @@ function formatCard(app) {
   return lines.join("\n");
 }
 
-// Без companyId — открытие конкретной заявки по id (кнопка "Открыть
-// заявку"/showCard/accept/reject) не должно зависеть от того, какая
-// компания сейчас выбрана в боте: заявка может принадлежать другой
-// компании интегратора, и её всё равно нужно найти и открыть. Фильтр по
-// текущей компании остаётся только в списках (listApplications/listByStatus),
-// которые вызывают internalApi.getApplications(user, user.maxCompanyId) сами.
 async function findApplication(user, applicationId) {
   const applications = await internalApi.getApplications(user);
   return applications.find((a) => String(a.id) === String(applicationId));

@@ -4,7 +4,6 @@ const { Op } = require("sequelize");
 
 const TRIAL_DAYS = 7;
 
-// Выбор тарифа при регистрации (или смена тарифа)
 async function selectPlan(userId, planId) {
   const user = await User.findByPk(userId);
   const plan = await Plan.findByPk(planId);
@@ -25,7 +24,6 @@ async function selectPlan(userId, planId) {
   return user;
 }
 
-// Пополнение баланса
 async function topUp(userId, amount, paymentRef = null) {
   if (paymentRef) {
     const existing = await Payment.findOne({ where: { paymentRef } });
@@ -35,17 +33,14 @@ async function topUp(userId, amount, paymentRef = null) {
   const user = await User.findByPk(userId);
   if (!user) throw new Error("Пользователь не найден");
 
-  // Записываем платёж
   const payment = await Payment.create({
     userId,
     amount,
     paymentRef,
   });
 
-  // Пополняем баланс
   user.balance = user.balance + amount;
 
-  // Если был заблокирован — автоматически разблокируем
   if (user.isBlocked) {
     user.isBlocked = false;
   }
@@ -54,7 +49,6 @@ async function topUp(userId, amount, paymentRef = null) {
   return payment;
 }
 
-// Узнать сколько дней даёт сумма по текущему тарифу
 async function getDaysForAmount(userId, amount) {
   const user = await User.findByPk(userId, { include: [{ model: Plan }] });
   if (!user?.plan) throw new Error("Тариф не выбран");
@@ -62,7 +56,6 @@ async function getDaysForAmount(userId, amount) {
   return Math.floor(amount / user.plan.pricePerDay);
 }
 
-// Списание за день (запускается cron-ом каждые сутки)
 async function chargeDaily() {
   const users = await User.findAll({
     where: {
@@ -80,7 +73,6 @@ async function chargeDaily() {
     const dailyPrice = user.plan.pricePerDay;
 
     if (user.balance >= dailyPrice) {
-      // Достаточно денег — списываем
       user.balance -= dailyPrice;
       await user.save();
     } else {
@@ -90,7 +82,6 @@ async function chargeDaily() {
   }
 }
 
-// Проверить доступ (используется в middleware)
 
 async function checkAccess(userId) {
   const user = await User.findByPk(userId, {

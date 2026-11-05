@@ -8,11 +8,6 @@ const {
 const { PushToken, MaxChat, MaxBotSession } = require("../models/model");
 const { sendPush } = require("./push.service");
 
-// Значимые события (новая заявка, смена статуса и т.п.) — шлём в MAX
-// всегда, это редкие и важные уведомления, как push в приложении.
-// data.applicationId/data.invitationId (если есть) дают кнопку-переход
-// прямо к заявке или к приглашению — без неё было непонятно, куда идти
-// самому (искать через "Все заявки"/"Приглашения" вручную).
 async function notifyUser(userId, title, body, data = {}) {
   const [tokens, maxChats] = await Promise.all([
     PushToken.findAll({ where: { userId }, attributes: ["token"] }),
@@ -37,15 +32,7 @@ async function notifyUser(userId, title, body, data = {}) {
   ]);
 }
 
-// Сообщения переписки — другое дело: их много, и если слать их в MAX
-// всегда, они лезут прямо в середину другого сценария (например, во
-// время заполнения фотоотчёта) и выглядят как случайные сообщения не по
-// теме. Поэтому в MAX реплика уходит только пока пользователь реально
-// держит открытым бот-чат именно по этой заявке — в остальных случаях
-// он всё равно узнает про сообщение через push.
 // message: { text, type: "text"|"image"|"video", fileBuffer?, fileName?, mimeType? }
-// text по-прежнему принимается и как обычная строка — для обратной
-// совместимости с местами, где вложений не бывает.
 async function notifyChatMessage(userId, applicationId, message) {
   const { text, type, fileBuffer, fileName, mimeType } =
     typeof message === "string" ? { text: message, type: "text" } : message;
@@ -85,9 +72,6 @@ async function notifyChatMessage(userId, applicationId, message) {
           tasks.push(maxSendMessage(maxChat.chatId, text));
         }
       } else {
-        // Бот сейчас не в этом чате (другой сценарий или чат вообще не
-        // открыт) — не встреваем полным текстом переписки, но даём
-        // короткий пинг с кнопкой, чтобы не заходить туда через меню.
         tasks.push(
           maxSendMessage(
             maxChat.chatId,
@@ -97,9 +81,6 @@ async function notifyChatMessage(userId, applicationId, message) {
         );
       }
     } catch (err) {
-      // Не удалось даже проверить, открыт ли чат в MAX (та же сетевая
-      // нестабильность до БД) — просто не шлём в MAX в этот раз, push
-      // всё равно уйдёт.
       console.log("notifyChatMessage session lookup error:", err.message);
     }
   }

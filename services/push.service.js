@@ -22,7 +22,7 @@ export async function sendPush(tokens, title, body, data = {}) {
     tickets.push(...ticketChunk);
   }
 
-  /* проверяем ошибки */
+   
   for (let i = 0; i < tickets.length; i++) {
     const ticket = tickets[i];
 

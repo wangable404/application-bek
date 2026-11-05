@@ -1,19 +1,6 @@
-// bot/max/scenarios/completeWork.js — FSM «Завершить работу».
 //
-// Один автомобиль: фото авто -> марка -> госномер -> оборудование (имя,
-// IMEI, фото IMEI) x N -> «добавить ещё авто?». Это повторяет
-// application-app/app/modal.tsx, где отчёт тоже собирается по машинам
-// (completionData.cars) и каждая машина шлётся отдельным
-// POST/PUT .../complete — здесь то же самое: submit() отправляет один
-// внутренний запрос на автомобиль.
 //
-// Доп. работы и акт — общие на весь отчёт, спрашиваются один раз после
-// того как все автомобили добавлены.
 //
-// Фото не скачиваются сразу: во время диалога в data хранится только
-// { token, url, filename } от MAX (JSON-совместимо, JSONB-колонка session.data
-// не хранит бинарные данные). Реальные байты скачиваются с MAX и заливаются
-// в POST /application/:id/complete только на шаге "Отправить".
 const {
   maxSendMessage,
   maxDownloadAttachment,
@@ -185,9 +172,6 @@ async function finishEquipmentEntry(chatId, data) {
   await askAddEquipment(chatId);
 }
 
-// Оборудование для текущего автомобиля закончено — фиксируем машину
-// целиком в data.cars и спрашиваем, нужен ли ещё один автомобиль
-// (как кнопка "Добавить автомобиль" в приложении).
 async function equipmentDone(chatId, session) {
   const cars = [...(session.data.cars || []), currentCarFromData(session.data)];
   await patchData(chatId, { cars, ...EMPTY_CAR_FIELDS });
@@ -199,8 +183,6 @@ async function equipmentDone(chatId, session) {
   );
 }
 
-// Пользователь хочет добавить ещё один автомобиль (либо сразу после
-// предыдущего, либо позже — прямо со сводки).
 async function addAnotherCar(chatId, session) {
   await setStep(chatId, "photos");
   await maxSendMessage(
@@ -210,9 +192,6 @@ async function addAnotherCar(chatId, session) {
   );
 }
 
-// Автомобили закончены — если доп.работы/акт уже спрашивали раньше
-// (машину добавили прямо со сводки), не переспрашиваем, а сразу
-// возвращаемся к сводке.
 async function finishCars(chatId, session) {
   if (session.data.actSigned !== undefined) {
     return showSummary(chatId, session.data);
@@ -299,11 +278,6 @@ async function submit(chatId, user, session) {
     return;
   }
 
-  // Защита от повторной отправки: пока запрос(ы) к бэкенду выполняются,
-  // повторное нажатие "Отправить" (например, если показалось, что первое
-  // не сработало) не запускает всё заново — иначе можно было продублировать
-  // фотоотчёт в БД. Флаг снимается либо при успехе (resetSession), либо
-  // явно в catch — чтобы после настоящей ошибки повтор всё же был возможен.
   await patchData(chatId, { submitting: true });
 
   try {

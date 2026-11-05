@@ -1,7 +1,4 @@
 // bot/max/keyboards.js
-// Билдеры инлайн-клавиатур MAX Bot API.
-// Формат: attachments: [{ type: "inline_keyboard", payload: { buttons: [[...]] } }]
-// (в отличие от Telegram, кнопки едут не в reply_markup, а как элемент attachments).
 
 function inlineKeyboard(rows) {
   return {
@@ -18,19 +15,8 @@ function linkButton(text, url) {
   return { type: "link", text, url };
 }
 
-// payload инлайн-кнопок — короткие машинно-читаемые строки вида
-// "action:arg1:arg2", их разбирает bot/max/dispatcher.js
 
-// Единственная точка входа. Дальше пользователь всегда идёт через
-// конкретную заявку: её карточка сама показывает нужные действия по
-// статусу (принять/отклонить, начать работу, завершить работу) и кнопку
-// чата — так же, как в application-app/app/modal.tsx. Отдельных
-// верхнеуровневых кнопок "Начать работу"/"Завершить работу"/"Чат" нет,
-// чтобы не путать пользователя, к какой заявке они относятся.
 //
-// Без выбранной компании (как и в приложении — там это обязательный шаг
-// на главном экране) работать с заявками нельзя, поэтому вместо
-// "Все заявки" показываем только выбор компании.
 const mainMenuKeyboard = (hasCompany) =>
   hasCompany
     ? inlineKeyboard([
@@ -45,10 +31,6 @@ const backToMenuKeyboard = () =>
 const cancelKeyboard = () =>
   inlineKeyboard([[callbackButton("✖️ Отмена", "scenario:cancel")]]);
 
-// При большом числе заявок (у компании их может быть и 200+) плоский
-// список кнопок становится бесполезным — сначала выбор статуса
-// (applicationsStatusMenuKeyboard), и только потом список внутри
-// выбранного статуса, с ограничением на число кнопок в одном сообщении.
 const APPLICATIONS_PAGE_SIZE = 30;
 
 const applicationsListKeyboard = (applications, backPayload = "menu:applications") =>
@@ -62,9 +44,6 @@ const applicationsListKeyboard = (applications, backPayload = "menu:applications
     [callbackButton("⬅️ К статусам", backPayload)],
   ]);
 
-// tabs: [{ key, label, count }] — та же разбивка, что и в приложении
-// (application-app/app/(tabs)/applications.tsx: STATUSES), чтобы
-// интегратор ориентировался одинаково в обоих местах.
 const applicationsStatusMenuKeyboard = (tabs) =>
   inlineKeyboard([
     ...tabs.map((t) => [callbackButton(`${t.label} (${t.count})`, `apps:status:${t.key}`)]),
@@ -115,11 +94,6 @@ const yesNoKeyboard = (yesPayload, noPayload) =>
     [callbackButton("✖️ Отмена", "scenario:cancel")],
   ]);
 
-// Подтверждение переподключения MAX-аккаунта, уже привязанного к другому
-// интегратору. Отдельная клавиатура (не yesNoKeyboard) — её "Отмена" не
-// должна идти через scenario:cancel/routeCallback: до подтверждения
-// пользователь ещё не привязан к боту как валидный user, поэтому решение
-// разбирается отдельной веткой в dispatcher.js (ns === "bind").
 const rebindConfirmKeyboard = () =>
   inlineKeyboard([
     [callbackButton("✅ Да, переподключить", "bind:confirm")],
@@ -152,15 +126,9 @@ const carMoreKeyboard = () =>
 const chatExitKeyboard = () =>
   inlineKeyboard([[callbackButton("🚪 Выйти из чата", "chat:exit")]]);
 
-// Кнопка-переход из push-подобного уведомления (новая заявка, смена
-// статуса и т.п.) прямо к карточке заявки — чтобы не приходилось идти
-// туда через "Все заявки" вручную.
 const applicationLinkKeyboard = (applicationId) =>
   inlineKeyboard([[callbackButton("📂 Открыть заявку", `app:open:${applicationId}`)]]);
 
-// То же самое для уведомления о новом сообщении в чате, когда бот сейчас
-// не в этом чате (иначе кнопка была бы избыточной — пользователь и так
-// там).
 const chatLinkKeyboard = (applicationId) =>
   inlineKeyboard([[callbackButton("💬 Открыть чат", `chat:open:${applicationId}`)]]);
 

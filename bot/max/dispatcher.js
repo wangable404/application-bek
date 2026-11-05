@@ -1,10 +1,3 @@
-// bot/max/dispatcher.js — единая точка входа для апдейтов MAX Bot API.
-// Разбирает update_type и раздаёт управление сценариям. Всё общение с
-// интегратором идёт инлайн-кнопками (attachments: inline_keyboard) —
-// свободный текст принимается только там, где кнопкой это в принципе
-// не заменить (дата, комментарий, IMEI, сообщения в чате), чтобы бот и
-// мобильное приложение не путали пользователя двумя разными способами
-// делать одно и то же.
 const { MaxChat, MaxBotSession, User } = require("../../models/model");
 const sequelize = require("../../db");
 const { verifyBindToken } = require("../../utils/maxBindToken");
@@ -20,25 +13,16 @@ const completeWork = require("./scenarios/completeWork");
 const chat = require("./scenarios/chat");
 
 async function resolveUser(chatId) {
-  // Один запрос вместо двух (MaxChat -> User одним include) — на каждый
-  // апдейт от MAX это вызывается всегда первым, вторая последовательная
-  // БД-round-trip тут просто не нужна.
   const maxChat = await MaxChat.findOne({
     where: { chatId: String(chatId) },
     include: [{ model: User }],
   });
   if (!maxChat?.user) return null;
 
-  // Компания, выбранная интегратором для работы в боте (аналог company
-  // из AuthContext в приложении) — вешаем прямо на user, чтобы не тащить
-  // maxChat отдельным параметром через все сценарии.
   maxChat.user.maxCompanyId = maxChat.companyId;
   return maxChat.user;
 }
 
-// TODO: убрать после того, как вживую сверим реальный формат апдейтов MAX
-// (message_callback/message_created/attachments) с тем, что предполагает
-// код ниже — публичная документация местами отдавалась не полностью.
 const DEBUG_LOG_UPDATES = process.env.MAX_DEBUG_LOG_UPDATES !== "false";
 
 async function handleUpdate(update) {
@@ -54,7 +38,6 @@ async function handleUpdate(update) {
     case "message_created":
       return handleMessage(update);
     default:
-      // остальные типы (bot_added/removed, chat_title_changed и т.п.) боту не нужны
       return;
   }
 }
@@ -77,11 +60,6 @@ async function handleBotStarted(update) {
 
   const existing = await MaxChat.findOne({ where: { chatId } });
 
-  // Этот же MAX-чат уже привязан к другому интегратору. chatId не
-  // уникален на уровне БД (уникален только userId — один интегратор не
-  // может держать сразу два MAX-аккаунта), поэтому единственная защита
-  // от того, чтобы один MAX-аккаунт оказался привязан сразу к двум
-  // интеграторам — явное подтверждение здесь перед переносом привязки.
   if (existing && existing.userId !== userId) {
     await getSession(chatId, userId);
     await setScenario(chatId, "rebind_confirm", null, {
@@ -104,14 +82,6 @@ async function handleBotStarted(update) {
   await menu.showWelcome(chatId);
 }
 
-// Полностью переносит MAX-чат на нового пользователя: удаляет ВСЕ строки,
-// которые могут столкнуться с новой привязкой (и по chatId, и по userId —
-// например, если для этого chatId ещё с тех пор, когда он не был защищён
-// от повторной привязки, успело накопиться несколько дублирующихся строк
-// на разных пользователей — DB_SYNC=false, поэтому unique(chatId) в схеме
-// на реальную БД так и не накатился), и создаёт одну свежую строку.
-// Специально не UPDATE/upsert "на месте" — так результат не зависит от
-// того, сколько именно строк реально совпадёт по chatId.
 async function rebindMaxChat(chatId, userId) {
   await sequelize.transaction(async (t) => {
     await MaxChat.destroy({ where: { chatId }, transaction: t });
@@ -120,29 +90,15 @@ async function rebindMaxChat(chatId, userId) {
   });
 }
 
-// Решение "переподключить / отменить" по конфликту из handleBotStarted.
-// Отдельная ветка (не routeCallback): пока подтверждения нет, chatId
-// формально ещё привязан к прежнему пользователю, и resolveUser(chatId)
-// вернул бы именно его — обрабатывать эти кнопки через обычный маршрут
-// с "чужим" user было бы неправильно.
 async function handleBindDecision(chatId, action) {
   const session = await MaxBotSession.findOne({ where: { chatId } });
   const pendingUserId =
     session?.scenario === "rebind_confirm" ? session.data?.pendingUserId : null;
 
   if (!pendingUserId) {
-    // Кнопка нажата повторно после того, как решение уже принято
-    // (или сессия истекла) — просто игнорируем, не пугаем ошибкой.
     return;
   }
 
-  // Атомарно "захватываем" это решение через условие scenario = 'rebind_confirm'
-  // прямо в WHERE — не отдельным SELECT, а потом UPDATE. MAX иногда дублирует
-  // доставку одного и того же клика (например, когда наш ответ на
-  // answerCallback не прошёл — "Can't deserialize body" в логах), и если оба
-  // экземпляра события придут почти одновременно, сценарий сменить и правда
-  // переподключить аккаунт сможет только один из них — у второго это условие
-  // в WHERE уже ничего не найдёт, и он тихо выйдет ниже.
   const [claimed] = await MaxBotSession.update(
     { scenario: "idle", step: null, applicationId: null, data: {} },
     { where: { chatId, scenario: "rebind_confirm" } },
@@ -175,20 +131,12 @@ async function handleBindDecision(chatId, action) {
 }
 
 async function handleCallback(update) {
-  // Реальный апдейт: chat_id лежит в update.message.recipient.chat_id
-  // (message — это сообщение с кнопкой, под которой нажали), а не
-  // в update.callback или в update.chat_id, как можно было бы ожидать
-  // по аналогии с Telegram.
   const chatId = String(
     update.message?.recipient?.chat_id ?? update.callback?.chat_id ?? update.chat_id,
   );
   const callbackId = update.callback?.callback_id;
   const payload = update.callback?.payload || "";
 
-  // Не ждём ответа MAX на answerCallback (это просто снимает "часики" с
-  // кнопки) — он не влияет на дальнейшую логику, а ждать его синхронно
-  // означало добавлять ещё один внешний round-trip к каждому нажатию,
-  // даже для кнопок вроде "Пропустить", которые вообще не ходят в БД.
   if (callbackId) {
     maxAnswerCallback(callbackId);
   }
@@ -218,14 +166,6 @@ async function handleCallback(update) {
   }
 }
 
-// Без выбранной компании работать с заявками нельзя — так же, как
-// приложение не показывает список заявок, пока не выбрана компания на
-// главном экране (application-app/app/(tabs)/index.tsx).
-// Исключение — app:open: это прямой переход по конкретной заявке (кнопка
-// из push-уведомления), а не просмотр списка. Он должен открывать карточку
-// сразу, независимо от того, выбрана ли компания и какая именно — иначе
-// клик по "Открыть заявку" в уведомлении утыкался в "выберите компанию"
-// вместо самой заявки.
 function requiresCompany(ns, action) {
   if (ns === "app" && action !== "open") return true;
   if (ns === "work" || ns === "apps") return true;
@@ -411,7 +351,6 @@ async function handleMessage(update) {
       return await hint(chatId);
     }
 
-    // idle — свободный текст не ожидается, кроме пары именных команд
     const lower = text.toLowerCase();
     if (lower === "помощь") {
       return await menu.showHelp(chatId, user);
@@ -426,17 +365,7 @@ async function handleMessage(update) {
   }
 }
 
-// Бэкенд обычно уже кладёт понятную причину в err.response.data.message
-// (ApiError) — показываем её вместо немого "попробуйте ещё раз", иначе
-// пользователь просто зацикливается на одной и той же ошибке. Кнопку
-// меню сюда специально не добавляем — на любом шаге доступна "Отмена".
 //
-// Но часть ошибок, которые долетают в этом же поле — не валидация, а
-// сырые технические сбои (обрыв соединения с БД, таймаут) — их бэкенд
-// заворачивает в тот же ApiError.badRequest(err.message), не различая
-// "это для пользователя" и "это для логов". Такие показывать как есть
-// нельзя, это не читаемо и не помогает — вместо этого просто "повторите
-// попытку" (что и работает — при повторном нажатии обычно проходит).
 const INFRA_ERROR_PATTERNS = [
   /connection terminated/i,
   /econnreset/i,

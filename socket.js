@@ -13,13 +13,11 @@ module.exports = function initSocket(server) {
   io.on("connection", (socket) => {
     console.log("✅ Socket connected:", socket.id);
 
-    // Присоединение к чату
     socket.on("join_chat", (applicationId, userId) => {
       socket.join(`chat_${applicationId}`);
       console.log(`✅ User ${userId} joined chat: chat_${applicationId}`);
     });
 
-    // Отсоединение от чата
     socket.on("leave_chat", (applicationId) => {
       socket.leave(`chat_${applicationId}`);
       console.log(`❌ Socket left chat: chat_${applicationId}`);

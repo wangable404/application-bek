@@ -23,8 +23,6 @@ const generateJwt = (
   return jwt.sign(payload, process.env.SECRET_KEY, { expiresIn: "24h" });
 };
 
-// Системный токен, которым MAX-бот вызывает внутренние REST-эндпоинты
-// bek от имени привязанного пользователя (та же авторизация, что у фронта).
 const generateSystemJwt = (user) =>
   generateJwt(
     user.id,

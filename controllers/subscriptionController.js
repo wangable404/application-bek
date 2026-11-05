@@ -10,7 +10,6 @@ const {
 const { Op } = require("sequelize");
 
 class SubscriptionController {
-  // Все тарифы (публично)
   async getPlans(req, res, next) {
     try {
       const user = req.user;
@@ -27,7 +26,6 @@ class SubscriptionController {
     }
   }
 
-  // Создать тариф (только ADMIN)
   async createPlan(req, res, next) {
     try {
       const user = req.user;
@@ -40,7 +38,6 @@ class SubscriptionController {
         return next(ApiError.badRequest("Заполните все поля"));
       }
 
-      // pricePerDay считаем автоматически из pricePerMonth
       const pricePerDay = Math.round(pricePerMonth / 30);
 
       const plan = await Plan.create({
@@ -56,7 +53,6 @@ class SubscriptionController {
     }
   }
 
-  // Обновить тариф (только ADMIN)
   async updatePlan(req, res, next) {
     try {
       const user = req.user;
@@ -76,7 +72,6 @@ class SubscriptionController {
       if (maxIntegrators !== undefined) plan.maxIntegrators = maxIntegrators;
       if (isActive !== undefined) plan.isActive = isActive;
 
-      // При изменении цены пересчитываем дневную стоимость
       if (pricePerMonth !== undefined) {
         plan.pricePerMonth = pricePerMonth;
         plan.pricePerDay = Math.round(pricePerMonth / 30);
@@ -89,7 +84,6 @@ class SubscriptionController {
     }
   }
 
-  // Удалить тариф (только ADMIN)
   async deletePlan(req, res, next) {
     try {
       const user = req.user;
@@ -103,8 +97,6 @@ class SubscriptionController {
         return next(ApiError.notFound("Тариф не найден"));
       }
 
-      // Не удаляем физически — деактивируем,
-      // чтобы не сломать пользователей на этом тарифе
       plan.isActive = false;
       await plan.save();
 
@@ -114,7 +106,6 @@ class SubscriptionController {
     }
   }
 
-  // Выбрать / сменить тариф
   async choosePlan(req, res, next) {
     try {
       const { planId } = req.body;
@@ -126,7 +117,6 @@ class SubscriptionController {
     }
   }
 
-  // Статус подписки текущего пользователя
   async getStatus(req, res, next) {
     try {
       const user = req.user;
@@ -145,7 +135,6 @@ class SubscriptionController {
     }
   }
 
-  // Сколько дней даст сумма
   async calcDays(req, res, next) {
     try {
       const { amount } = req.body;
@@ -156,7 +145,6 @@ class SubscriptionController {
     }
   }
 
-  // Пополнить баланс (вебхук от платёжки)
   async topUp(req, res, next) {
     try {
       const { userId, amount, paymentRef } = req.body;
@@ -167,7 +155,6 @@ class SubscriptionController {
     }
   }
 
-  // История платежей текущего пользователя
   async getPayments(req, res, next) {
     try {
       const user = req.user;
@@ -207,7 +194,6 @@ class SubscriptionController {
     }
   }
 
-  // Все компании с остатком дней (только ADMIN)
   async getCompaniesWithDays(req, res, next) {
     try {
       const user = req.user;
@@ -269,7 +255,6 @@ class SubscriptionController {
           };
         }
 
-        // Активен
         const daysLeft = Math.floor(c.balance / pricePerDay);
         return {
           ...c,

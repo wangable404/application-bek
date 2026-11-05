@@ -93,9 +93,6 @@ const MaxChat = sequelize.define("max_chat", {
     defaultValue: DataTypes.UUIDV4,
     primaryKey: true,
   },
-  // unique — иначе MaxChat.upsert({userId, chatId}) в bot_started не находит,
-  // с чем конфликтовать по ON CONFLICT, и на каждый повторный /start плодит
-  // дублирующиеся строки (а значит и дублирующиеся уведомления в notify.service).
   userId: {
     type: DataTypes.UUID,
     references: {
@@ -105,16 +102,7 @@ const MaxChat = sequelize.define("max_chat", {
     allowNull: false,
     unique: true,
   },
-  // unique — один MAX-аккаунт (chatId) не должен быть привязан больше чем
-  // к одному интегратору. sequelize.sync() без alter не накатит этот
-  // constraint на уже существующую таблицу — реальную защиту от дублей
-  // на проде даёт логика переподключения в bot/max/dispatcher.js
-  // (handleBotStarted/rebindMaxChat), это лишь страховка для новых окружений.
   chatId: { type: DataTypes.STRING, allowNull: false, unique: true },
-  // Компания, под которой интегратор сейчас работает в боте — аналог
-  // company/setCompany в приложении (там хранится на устройстве,
-  // AsyncStorage). Пока не выбрана — бот не показывает заявки, как и
-  // приложение не показывает их без выбранной компании на главном экране.
   companyId: {
     type: DataTypes.UUID,
     references: {
@@ -125,8 +113,6 @@ const MaxChat = sequelize.define("max_chat", {
   },
 });
 
-// Состояние диалога (FSM) MAX-бота: на каком шаге какого сценария
-// находится конкретный chatId и что уже успел собрать (черновик).
 const MaxBotSession = sequelize.define("max_bot_sessions", {
   id: {
     type: DataTypes.UUID,
@@ -164,10 +150,6 @@ const MaxBotSession = sequelize.define("max_bot_sessions", {
   },
 });
 
-// Короткоживущий одноразовый токен для привязки MAX-аккаунта через
-// deep link (?start=...). См. utils/maxBindToken.js — MAX не передаёт
-// payload диплинка длиннее 128 символов, поэтому сам userId тут не
-// хранится в токене, а лежит рядом в этой таблице.
 const MaxBindToken = sequelize.define("max_bind_tokens", {
   token: {
     type: DataTypes.STRING,
@@ -317,9 +299,9 @@ const Application = sequelize.define("applications", {
   },
   workType: {
     type: DataTypes.ENUM(
-      "service", //  Сервисные работы
-      "transition", // Переход
-      "installation", // Установка
+      "service", 
+      "transition", 
+      "installation", 
     ),
     defaultValue: "installation",
     comment: "Тип работ",
@@ -482,16 +464,10 @@ const Message = sequelize.define(
     text: {
       type: DataTypes.STRING,
     },
-    // "text" | "image" | "video" — тип содержимого сообщения. Текст и
-    // вложение не взаимоисключающие: text здесь используется как подпись
-    // к фото/видео (см. sendMessage в chatController).
     type: {
       type: DataTypes.STRING,
       defaultValue: "text",
     },
-    // Путь к файлу вложения относительно static/ (например
-    // "chat/<chatId>/<file>.jpg") — раздаётся тем же express.static,
-    // что и static/uploads.
     fileUrl: {
       type: DataTypes.STRING,
       allowNull: true,

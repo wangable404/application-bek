@@ -1,19 +1,10 @@
 // services/max.service.js
-// Прямой клиент MAX Bot API (https://dev.max.ru/docs-api).
-// Раньше сообщения уходили через отдельный relay-сервис (application-tgbot);
-// теперь бэкенд сам ходит в MAX API — relay для MAX не даёт никакой защиты
-// от блокировок мобильного интернета (это трафик сервер-сервер и до, и после),
-// а только добавляет лишний хоп и точку отказа.
 const axios = require("axios");
 const https = require("https");
 
 const MAX_API = "https://platform-api2.max.ru";
 const MAX_BOT_TOKEN = process.env.MAX_BOT_TOKEN;
 
-// keepAlive: без него каждый вызов (а на одно нажатие кнопки их обычно
-// минимум два — answerCallback + ответное сообщение) заново поднимает
-// TLS-соединение до platform-api2.max.ru, это и давало заметные задержки
-// даже там, где нет никакой работы с БД.
 const keepAliveAgent = new https.Agent({ keepAlive: true });
 
 const maxApi = axios.create({
@@ -23,12 +14,6 @@ const maxApi = axios.create({
   timeout: 15000,
 });
 
-// Изредка запросы до platform-api2.max.ru рвутся на нестабильном канале
-// прямо в процессе (видели и ECONNRESET, и "Can't deserialize body" —
-// похоже на повреждение тела запроса при обрыве, а не баг в самом теле,
-// раз оно не меняется и ошибка не всегда). Один быстрый повтор почти
-// ничего не стоит, а для сообщений в чате — единственное, что реально
-// решает жалобу "сообщения не доходят".
 async function postWithRetry(path, body, config, attempts = 2) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
@@ -44,22 +29,8 @@ async function postWithRetry(path, body, config, attempts = 2) {
   throw lastErr;
 }
 
-// Реплики менеджера доставляются в MAX через notifyChatMessage, которая
-// не ждёт своего завершения (чтобы не задерживать ответ отправителю) —
-// значит несколько сообщений подряд могут реально уйти в сеть почти
-// одновременно, и с ретраями (см. postWithRetry) более раннее сообщение
-// иногда долетает ПОЗЖЕ более позднего. Чтобы в один и тот же MAX-чат
-// сообщения приходили строго в том порядке, в котором их поставили в
-// очередь — а не в том, в котором успели исполниться сетевые запросы —
-// сериализуем отправку по chatId.
 const sendQueues = new Map();
 
-/**
- * Отправить текстовое сообщение, опционально с инлайн-клавиатурой.
- * @param {string|number} chatId
- * @param {string} text
- * @param {object} [keyboard] - результат keyboards.js (attachments-объект inline_keyboard)
- */
 function maxSendMessage(chatId, text, keyboard) {
   const key = String(chatId);
   const prev = sendQueues.get(key) || Promise.resolve();
@@ -85,17 +56,6 @@ async function doSendMessage(chatId, text, keyboard) {
   }
 }
 
-/**
- * Отправить фото/видео из буфера, уже находящегося в памяти (сообщение
- * чата с вложением) — сериализуется по chatId так же, как maxSendMessage,
- * иначе вложение может обогнать/перепутаться местами с соседним текстовым
- * сообщением в том же чате.
- * @param {string|number} chatId
- * @param {Buffer} buffer
- * @param {string} filename
- * @param {string} mimeType
- * @param {string} [caption]
- */
 function maxSendAttachment(chatId, buffer, filename, mimeType, caption) {
   const key = String(chatId);
   const prev = sendQueues.get(key) || Promise.resolve();
@@ -146,10 +106,6 @@ async function doSendAttachment(chatId, buffer, filename, mimeType, caption) {
   }
 }
 
-/**
- * Отправить фото по прямой ссылке (используется для показа уже загруженных
- * фотоотчётов пользователю в чате бота).
- */
 async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
   try {
     const fileResponse = await axios.get(photoUrl, {
@@ -171,12 +127,6 @@ async function maxSendPhotoByUrl(chatId, photoUrl, caption) {
   }
 }
 
-/**
- * Скачать фото/файл, присланный пользователем боту.
- * MAX присылает вложение в виде { type: "image", payload: { token, url } } —
- * url уже даёт прямой доступ к файлу, отдельный запрос за ссылкой не нужен.
- * @returns {Promise<Buffer|null>}
- */
 async function maxDownloadAttachment(url) {
   try {
     const response = await axios.get(url, {
@@ -191,17 +141,8 @@ async function maxDownloadAttachment(url) {
   }
 }
 
-/**
- * Убрать "часики"/подтвердить нажатие инлайн-кнопки, опционально обновив
- * текст/клавиатуру сообщения, под которым была кнопка.
- */
 async function maxAnswerCallback(callbackId, options = {}) {
   try {
-    // MAX требует, чтобы в теле обязательно был message ИЛИ notification —
-    // пустой {} отклоняется ("`message` or `notification` required").
-    // Раз мы почти всегда шлём отдельным сообщением что произошло дальше
-    // (а не редактируем исходное сообщение с кнопкой), по умолчанию просто
-    // убираем "часики" коротким тихим notification.
     const body = options.text
       ? {
           message: {

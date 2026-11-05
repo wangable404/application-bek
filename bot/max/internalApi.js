@@ -1,11 +1,5 @@
 // bot/max/internalApi.js
 //
-// MAX-бот не дублирует бизнес-логику: он вызывает те же REST-эндпоинты
-// bek, что и мобильное приложение (application-app/app/modal.tsx),
-// с тем же телом запроса. Это внутренний loopback-вызов в тот же процесс
-// (127.0.0.1), а не поход на публичный BACKEND_URL — тот самый домен,
-// который блокируется на мобильном интернете, здесь ни при чём:
-// сервер стучится сам в себя.
 const axios = require("axios");
 const http = require("http");
 const { generateSystemJwt } = require("../../utils/jwt");
@@ -20,9 +14,6 @@ function client(user) {
     baseURL: BASE_URL,
     headers: { Authorization: `Bearer ${token}` },
     httpAgent: keepAliveAgent,
-    // Фотоотчёт с несколькими машинами/фото может грузиться дольше обычного
-    // запроса — таймаут не такой жёсткий, как у внешних вызовов к MAX, но
-    // не бесконечный, чтобы зависший запрос не вис молча вечно.
     timeout: 60000,
   });
 }
@@ -34,14 +25,11 @@ async function getApplications(user, companyId) {
   return data;
 }
 
-// Компании, к которым интегратор уже принят (approved: true у Invitation).
 async function getCompanies(user) {
   const { data } = await client(user).get("/user/invite/companies");
   return data;
 }
 
-// Все приглашения интегратора (принятые/отклонённые/ожидающие вперемешку —
-// фильтруем на стороне бота, как это делает и мобильное приложение).
 async function getInvitations(user) {
   const { data } = await client(user).get("/user/invite");
   return data;
@@ -70,16 +58,6 @@ async function startWork(user, applicationId, { agreedDate, startWorkComment, wo
   return data;
 }
 
-/**
- * @param {object} draft - собранный ходом диалога черновик
- * @param {string} draft.brand
- * @param {string} draft.stateNumber
- * @param {{buffer: Buffer, filename: string}[]} draft.photos
- * @param {{equipment: string, imei: string, imeiPhoto?: {buffer: Buffer, filename: string}}[]} draft.equipment
- * @param {string} [draft.completionComment]
- * @param {string} [draft.additionalWork]
- * @param {boolean} [draft.actSigned]
- */
 async function completeApplication(user, applicationId, draft) {
   const form = new FormData();
   form.append("brand", draft.brand);

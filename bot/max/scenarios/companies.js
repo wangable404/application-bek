@@ -1,8 +1,3 @@
-// bot/max/scenarios/companies.js — выбор компании и приглашения.
-// Аналог application-app/app/(screens)/companies.tsx и выбора компании на
-// главном экране приложения: интегратор не может смотреть/вести заявки,
-// пока не выбрал компанию, с которой работает (см. дispatcher.js — гейт
-// перед app:/work:/chat:open).
 const { maxSendMessage } = require("../../../services/max.service");
 const { MaxChat } = require("../../../models/model");
 const internalApi = require("../internalApi");
@@ -57,8 +52,6 @@ async function selectCompany(chatId, user, companyId) {
 
   await maxSendMessage(chatId, "✅ Компания выбрана.");
 
-  // user переиспользуется дальше в этом же апдейте — обновляем на месте,
-  // чтобы listApplications увидела уже выбранную компанию без лишнего похода в БД.
   user.maxCompanyId = companyId;
   await listApplications(chatId, user);
 }
@@ -94,10 +87,6 @@ async function showInvitations(chatId, user) {
   }
 }
 
-// Открыть конкретное приглашение по кнопке из push-подобного уведомления
-// (userController.inviteCreate -> notifyUser с data.invitationId) — без
-// него было непонятно, что уведомление вообще про приглашение и куда за
-// ним идти (только текст, без действия).
 async function showInvitation(chatId, user, invitationId) {
   const invitations = await internalApi.getInvitations(user);
   const invitation = invitations.find((inv) => String(inv.id) === String(invitationId));

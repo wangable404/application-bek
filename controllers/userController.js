@@ -291,12 +291,6 @@ class UserController {
       next(ApiError.badRequest(err.message));
     }
   }
-  // Статус привязки MAX и свежая ссылка для (пере)подключения — используется
-  // в профиле приложения, чтобы можно было сменить подключённый MAX-аккаунт
-  // без повторного ввода email/пароля (в отличие от login(), где эта же
-  // ссылка выдаётся как часть входа). MaxChat.userId уникален (см.
-  // models/model.js), поэтому переход по новой ссылке с другого MAX-аккаунта
-  // просто перепривязывает существующую запись, а не плодит дубликаты.
   async getMaxConnection(req, res, next) {
     try {
       const userId = req.user.id;
@@ -414,7 +408,6 @@ class UserController {
       if (isVerified !== undefined) user.isVerified = isVerified;
 
       if (password !== undefined) {
-        // если используешь хеширование
         const hashPassword = await bcrypt.hash(password, 10);
         user.password = hashPassword;
       }
@@ -555,10 +548,6 @@ class UserController {
   async getIntegrators(req, res, next) {
     try {
       const user = req.user;
-      // ADMIN может явно запросить интеграторов конкретной компании (например,
-      // чтобы переназначить отклонённую заявку) — своей компании при этом у
-      // ADMIN нет, поэтому companyId=req.user.id по умолчанию для него бы не
-      // сработал. Обычная COMPANY по-прежнему видит только своих интеграторов.
       const companyId =
         user.role === "ADMIN" && req.query.companyId ? req.query.companyId : user.id;
 

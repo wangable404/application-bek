@@ -16,10 +16,6 @@ const ALLOWED_VIDEO_TYPES = [
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
-// Вложения чата лежат в той же дереве, что и фотоотчёты
-// (static/uploads/<applicationId>/...), рядом с ними — static/uploads/<applicationId>/chat/photo
-// или .../chat/video, чтобы у каждой заявки были свои файлы, и фото не
-// перемешивались с видео в одной папке.
 async function saveChatAttachment(file, applicationId) {
   const mimeType = file.mimetype;
   const isImage = ALLOWED_IMAGE_TYPES.includes(mimeType);
@@ -74,11 +70,8 @@ class ChatController {
   async getByApplication(req, res, next) {
     try {
       const { applicationId } = req.params;
-      const user = req.user; // роль/id уже есть из JWT, повторный User.findByPk не нужен
+      const user = req.user; 
 
-      // Заявка и чат одним запросом (Application.hasOne(Chat)) вместо двух
-      // последовательных — это самый частый способ открыть чат и из
-      // приложения, и из бота, важно, чтобы он не тормозил.
       const application = await Application.findByPk(applicationId, {
         attributes: ["id", "userId"],
         include: [{ model: Chat, attributes: ["id"] }],
@@ -154,7 +147,6 @@ class ChatController {
         order: [["updatedAt", "DESC"]],
       });
 
-      // Фильтруем чаты для обычных пользователей
       const filteredChats =
         user.role === "USER"
           ? chats.filter((chat) => chat.application.userId === user.id)
@@ -266,7 +258,6 @@ class ChatController {
           unarchivedBy: userId,
         });
 
-        // Также отправляем общее обновление чатов
         io.emit("chat_updated", {
           chatId: chat.id,
           applicationId: chat.applicationId,
@@ -309,12 +300,12 @@ class ChatController {
             include: [
               {
                 model: User,
-                as: "integrator", // ✅ интегратор которому назначена заявка
+                as: "integrator", 
                 attributes: ["id", "firstName", "lastName", "role"],
               },
               {
                 model: User,
-                as: "company", // ✅ компания которая создала заявку
+                as: "company", 
                 attributes: ["id", "firstName", "lastName", "role"],
               },
             ],
@@ -368,10 +359,6 @@ class ChatController {
   async sendMessage(req, res, next) {
     try {
       const { applicationId } = req.params;
-      // req.body остаётся undefined, если в multipart-запросе нет ни одного
-      // текстового поля (express-fileupload инициализирует req.body только
-      // при первом busboy-событии 'field') — ровно так и приходит фото/видео
-      // без подписи, поэтому req.body без подстраховки нельзя трогать напрямую.
       const text = ((req.body && req.body.text) || "").trim();
       const user = req.user;
       const file = req.files?.attachment;
@@ -380,9 +367,6 @@ class ChatController {
         return next(ApiError.badRequest("Сообщение пустое"));
       }
 
-      // Один запрос вместо двух (чат + заявка одним include) — раньше
-      // здесь же был отдельный поход за PushToken, который вообще нигде
-      // не использовался (мёртвый код).
       const chat = await Chat.findOne({
         where: { applicationId },
         include: [{ model: Application, attributes: ["id", "userId"] }],
@@ -423,8 +407,6 @@ class ChatController {
         fileSize: attachment?.size || null,
       });
 
-      // Автора сообщения уже знаем из req.user (это он и есть) — не нужно
-      // повторно идти в БД за тем же самым через Message.findByPk(...).
       const fullMessage = {
         ...message.toJSON(),
         user: {
@@ -444,18 +426,11 @@ class ChatController {
         });
       }
 
-      // Ничего из этого не должно задерживать ответ отправителю или
-      // проваливать уже состоявшуюся отправку сообщения — оно уже создано
-      // и разослано по сокету. touch updatedAt (для сортировки списка
-      // чатов) и уведомление в push/MAX уходят фоном.
       chat.update({ updatedAt: new Date() }).catch((err) => {
         console.log("chat touch updatedAt error:", err.message);
       });
 
       if (user.id !== chat.application.userId) {
-        // file.data — буфер уже прочитанного в память файла (express-fileupload
-        // без useTempFiles), тот же файл, что только что сохранён на диск.
-        // Передаём его напрямую в MAX вместо похода за файлом обратно по HTTP.
         notifyChatMessage(chat.application.userId, applicationId, {
           text,
           type: fullMessage.type,
@@ -487,7 +462,6 @@ class ChatController {
         },
       );
 
-      // ✅ Отправляем событие об обновлении прочитанных сообщений
       const io = req.app.get("io");
       if (io) {
         io.emit("messages_read", { chatId, userId });

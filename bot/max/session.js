@@ -1,4 +1,3 @@
-// bot/max/session.js — состояние диалога (FSM) для конкретного MAX-чата.
 const { MaxBotSession } = require("../../models/model");
 
 async function getSession(chatId, userId) {

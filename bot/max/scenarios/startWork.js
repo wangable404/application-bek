@@ -1,5 +1,3 @@
-// bot/max/scenarios/startWork.js — FSM «Начать работу»:
-// дата -> комментарий -> тип работ -> подтверждение.
 const { maxSendMessage } = require("../../../services/max.service");
 const internalApi = require("../internalApi");
 const { setScenario, setStep, patchData } = require("../session");

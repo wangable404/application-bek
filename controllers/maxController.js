@@ -8,9 +8,6 @@ class MaxController {
         return res.sendStatus(403);
       }
 
-      // Отвечаем 200 сразу, обработку не заставляем ждать вебхук (MAX ретраит
-      // при таймауте), но и не проглатываем ошибки молча — они логируются
-      // внутри dispatcher.
       res.sendStatus(200);
       await dispatcher.handleUpdate(req.body);
     } catch (err) {
